@@ -4,23 +4,25 @@ import { documentKind, extractDocumentText } from '../ai/documentText.js'
 import {
   EMPTY_PROFILE,
   buildChatMessages,
-  buildExtractionMessages,
   dedupeInterests,
   mergeProfiles,
   parseModelProfile,
+  quickProfile,
   topicsFromText,
 } from '../ai/profile.js'
 import { facultyEmbeddingText, profileEmbeddingText, rankIndexes } from '../ai/vectors.js'
 
-// In-browser matching: Qwen2.5-0.5B-Instruct reads uploads and chat messages
-// into an interest profile, MiniLM embeds it, and faculty are ranked by cosine
-// similarity. Nothing leaves the browser except model downloads from the
-// Hugging Face Hub (cached by the browser after the first visit).
+// In-browser matching: an upload is turned into a profile without a language
+// model (quickProfile), MiniLM embeds it, and faculty are ranked by cosine
+// similarity, so the first match needs only the ~23 MB embedding model. Chat
+// messages are read by Qwen2.5-0.5B-Instruct, which downloads (a few hundred MB)
+// the first time someone sends one. Nothing leaves the browser except model
+// downloads from the Hugging Face Hub (cached by the browser after the first visit).
 //
 // const ai = useLocalAI(faculty, { institutionIds })
 //   faculty           catalog rows (useFacultySearch().faculty); matches point at these
 //   institutionIds    universities whose embedding shards to rank against, null = all
-//   ai.profile        { interests: string[], summary: string }
+//   ai.profile        { interests: string[], summary: string, text: string }  (text = research text from uploads)
 //   ai.matches        [{ faculty, score }] best first, [] until a profile exists
 //   ai.missingInstitutionIds  universities of matches whose rows aren't in `faculty` yet
 //   ai.matchScope     { universities, totalUniversities } when matching without a
@@ -35,7 +37,7 @@ import { facultyEmbeddingText, profileEmbeddingText, rankIndexes } from '../ai/v
 //   ai.addText(text, name?)   pasted profile or CV text
 //   ai.sendMessage(text)      chat input, merged into the profile
 //   ai.removeInterest(topic) / ai.setInterests(list) / ai.reset()
-//   ai.preload()              start model downloads early (optional)
+//   ai.preload(models?)       start model downloads early (default: the embedding model only)
 
 let workerInstance = null
 let nextRequestId = 1
@@ -144,34 +146,29 @@ export default function useLocalAI(faculty = NO_FACULTY, { institutionIds = null
     }
   }, [])
 
-  const extractProfile = useCallback(async (text) => {
-    const output = await callWorker({ type: 'generate', messages: buildExtractionMessages(text) })
-    return parseModelProfile(output)
-  }, [])
-
   const addText = useCallback(
     (text, name = 'Pasted text') =>
       run(`Reading ${name}…`, async () => {
-        if (!text?.trim()) throw new Error(`No readable text found in ${name}.`)
-        const extracted = await extractProfile(text)
+        const extracted = quickProfile(text)
+        if (!extracted.text) throw new Error(`No research text found in ${name}.`)
         setSources((s) => [...s, { name, kind: 'text', interests: extracted.interests }])
         setProfile((p) => mergeProfiles(p, extracted))
         return extracted
       }),
-    [run, extractProfile],
+    [run],
   )
 
   const addDocument = useCallback(
     (file) =>
       run(`Reading ${file.name}…`, async () => {
         const text = await extractDocumentText(file)
-        if (!text?.trim()) throw new Error(`No readable text found in ${file.name}.`)
-        const extracted = await extractProfile(text)
+        const extracted = quickProfile(text)
+        if (!extracted.text) throw new Error(`No research text found in ${file.name}.`)
         setSources((s) => [...s, { name: file.name, kind: documentKind(file), interests: extracted.interests }])
         setProfile((p) => mergeProfiles(p, extracted))
         return extracted
       }),
-    [run, extractProfile],
+    [run],
   )
 
   const sendMessage = useCallback(
@@ -220,7 +217,7 @@ export default function useLocalAI(faculty = NO_FACULTY, { institutionIds = null
   }, [])
 
   const preload = useCallback(
-    (models = ['embedding', 'chat']) => callWorker({ type: 'load', models }).catch((err) => setError(err.message)),
+    (models = ['embedding']) => callWorker({ type: 'load', models }).catch((err) => setError(err.message)),
     [],
   )
 

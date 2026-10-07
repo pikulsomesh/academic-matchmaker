@@ -88,6 +88,7 @@ export default function useMatcherBridge(ai) {
       messages,
       onSendMessage: sendMessage,
       interests: live ? ai.profile?.interests ?? [] : [],
+      focus: live ? ai.profile?.text ?? '' : '',
       onRemoveInterest: live ? ai.removeInterest : undefined,
       onReset: () => {
         setPending([])

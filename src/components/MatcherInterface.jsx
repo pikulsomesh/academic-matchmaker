@@ -16,6 +16,7 @@ import { Bot, FileText, LoaderCircle, Send, Sparkles, Trash2, Upload, X } from '
  * @param {Array<{id: string, role: 'user'|'assistant', content: string}>} props.messages
  * @param {(text: string) => void}  props.onSendMessage
  * @param {string[]}                props.interests     Merged research interests extracted so far.
+ * @param {string}                  [props.focus]       Research text read from uploads; shown while no interests are listed.
  * @param {(interest: string) => void} props.onRemoveInterest
  * @param {() => void}              [props.onFindMatches] Explicit "Find matches" action. Omit when
  *        matching re-runs on its own as interests change; a hint replaces the button.
@@ -33,6 +34,7 @@ export default function MatcherInterface({
   messages = [],
   onSendMessage = () => {},
   interests = [],
+  focus = '',
   onRemoveInterest,
   onFindMatches,
   onReset,
@@ -74,7 +76,7 @@ export default function MatcherInterface({
     setDraft('')
   }
 
-  const hasInput = documents.length > 0 || messages.length > 0 || interests.length > 0
+  const hasInput = documents.length > 0 || messages.length > 0 || interests.length > 0 || Boolean(focus)
 
   return (
     <section onPointerEnter={activate} onFocus={activate} className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
@@ -175,7 +177,8 @@ export default function MatcherInterface({
                 <Bot className="mt-0.5 h-4 w-4 shrink-0" />
                 <p>
                   Tell me what you want to research next, e.g. “graph neural networks for catalyst discovery” or
-                  “causal inference in labour economics”.
+                  “causal inference in labour economics”. The first message downloads a small language model
+                  (a few hundred MB, kept by your browser afterwards); uploads don’t need it.
                 </p>
               </div>
             ) : (
@@ -219,7 +222,14 @@ export default function MatcherInterface({
       <footer className="flex flex-wrap items-center gap-3 border-t border-gray-100 px-5 py-4 sm:px-6">
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
           {interests.length === 0 ? (
-            <span className="text-sm text-mit-gray">Extracted interests will appear here.</span>
+            focus ? (
+              <span className="min-w-0 text-sm text-mit-gray" title={focus}>
+                <span className="font-medium text-charcoal">Matching on:</span> “{focus.slice(0, 160)}
+                {focus.length > 160 ? '…' : ''}”
+              </span>
+            ) : (
+              <span className="text-sm text-mit-gray">Extracted interests will appear here.</span>
+            )
           ) : (
             interests.map((i) => (
               <span
@@ -263,9 +273,9 @@ export default function MatcherInterface({
               Find matches
             </button>
           ) : (
-            interests.length > 0 && (
+            (interests.length > 0 || focus) && (
               <span className="flex items-center gap-1.5 self-center text-xs text-mit-gray">
-                <Sparkles className="h-3.5 w-3.5 text-cardinal" /> Results below are ranked by these interests
+                <Sparkles className="h-3.5 w-3.5 text-cardinal" /> Results below are ranked by your profile
               </span>
             )
           )}

@@ -7,6 +7,7 @@ import {
   decodeEmbeddingShard,
   facultyEmbeddingText,
   normalize,
+  PROFILE_TEXT_CHARS,
   profileEmbeddingText,
   rankByCosine,
   rankIndexes,
@@ -45,6 +46,9 @@ test('faculty text follows the shared recipe', () => {
 test('profile text', () => {
   assert.equal(profileEmbeddingText({ interests: ['A', 'B'], summary: 'S.' }), 'Research areas: A, B. S.')
   assert.equal(profileEmbeddingText({ interests: [], summary: '' }), '')
+  assert.equal(profileEmbeddingText({ interests: ['A'], summary: '', text: 'Resume text.' }), 'Research areas: A. Resume text.')
+  const long = profileEmbeddingText({ interests: ['A'], summary: 'S.', text: 'x'.repeat(5000) })
+  assert.ok(long.length <= PROFILE_TEXT_CHARS + 3)
 })
 
 for (const dtype of ['float32', 'int8']) {

@@ -23,11 +23,17 @@ export function facultyEmbeddingText(faculty) {
   return parts.join(' ')
 }
 
-// The text the user's profile is embedded from.
+// The text the user's profile is embedded from: their interests and summary
+// first (the most precise statement of focus), then document text to fill
+// MiniLM's ~256-token window.
+export const PROFILE_TEXT_CHARS = 1200
+
 export function profileEmbeddingText(profile) {
   const parts = []
   if (profile.interests?.length) parts.push(`Research areas: ${profile.interests.join(', ')}.`)
   if (profile.summary) parts.push(profile.summary)
+  const used = parts.join(' ').length
+  if (profile.text && used < PROFILE_TEXT_CHARS) parts.push(profile.text.slice(0, PROFILE_TEXT_CHARS - used))
   return parts.join(' ')
 }
 
