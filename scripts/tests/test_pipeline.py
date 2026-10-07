@@ -438,7 +438,12 @@ class BatchedWorksTests(unittest.TestCase):
 
 
 class PipelineTests(unittest.TestCase):
+    reads_vectors = False  # whether src/ is taken to read vectors/ (it does on main; must not change expectations)
+
     def setUp(self):
+        patcher = mock.patch.object(build_search_index, "site_reads_vectors", side_effect=lambda: self.reads_vectors)
+        patcher.start()
+        self.addCleanup(patcher.stop)
         self.tmp = tempfile.mkdtemp()
         self.config = os.path.join(self.tmp, "config.json")
         with open(self.config, "w") as fh:
@@ -537,7 +542,15 @@ class PipelineTests(unittest.TestCase):
     def read(self, name):
         return json.loads(pathlib.Path(self.tmp, name).read_text())
 
-    @mock.patch.object(build_search_index, "site_reads_vectors", lambda: False)
+    def test_embeddings_dropped_once_site_reads_vectors(self):
+        self.reads_vectors = True
+        self.ingest()
+        build_search_index.main(["--data-dir", self.tmp], encoder=FakeEncoder())
+        self.assertNotIn("embeddings_file", self.read("universities.json")[0])
+        self.assertFalse(os.path.exists(os.path.join(self.tmp, "embeddings")))
+        self.assertEqual(self.read("metadata.json")["vectors"]["count"], 3)
+        self.assertTrue(os.path.exists(os.path.join(self.tmp, "vectors", "centroids.json")))
+
     def test_shards(self):
         records, _ = self.ingest()
         build_search_index.main(["--data-dir", self.tmp], encoder=FakeEncoder())
