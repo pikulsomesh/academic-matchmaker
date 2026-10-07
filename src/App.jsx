@@ -6,9 +6,13 @@ import MatcherInterface from './components/MatcherInterface.jsx'
 import FacultyCard from './components/FacultyCard.jsx'
 import FacultyDetailModal from './components/FacultyDetailModal.jsx'
 import AboutModal from './components/AboutModal.jsx'
+import CopyLinkButton from './components/CopyLinkButton.jsx'
+import ShortlistModal from './components/ShortlistModal.jsx'
 import useFacultySearch, { SORTS } from './hooks/useFacultySearch.js'
 import useLocalAI from './hooks/useLocalAI.js'
 import useMatcherBridge from './hooks/useMatcherBridge.js'
+import useShortlist from './hooks/useShortlist.js'
+import { buildHash, parseHash } from './lib/urlState.js'
 
 const PAGE_SIZE = 24
 
@@ -40,8 +44,35 @@ export default function App() {
   const filtered = Boolean(search.filters.country || search.filters.institution)
   const coverageNote = coverageMessage(coverage, filtered, matchScores ? ai.matchScope : null)
 
+  const shortlist = useShortlist()
   const [selected, setSelected] = useState(null)
   const [aboutOpen, setAboutOpen] = useState(false)
+  const [shortlistOpen, setShortlistOpen] = useState(false)
+
+  // A shared link names the open researcher (#r=<id>); open them once the catalog is in.
+  // People outside the catalog on large builds open only if they're on this visitor's shortlist.
+  const [pendingResearcher, setPendingResearcher] = useState(() => parseHash(window.location.hash).researcher)
+  useEffect(() => {
+    if (!pendingResearcher || loading) return
+    const row = search.faculty.find((f) => f.id === pendingResearcher) ?? shortlist.entries.find((e) => e.id === pendingResearcher)?.row
+    if (row) setSelected(row)
+    setPendingResearcher('')
+  }, [pendingResearcher, loading, search.faculty, shortlist.entries])
+
+  // Keep the address in step with the search, so copying it shares the view.
+  const { country, institution, domains } = search.filters
+  useEffect(() => {
+    const hash = buildHash({
+      query,
+      sort: search.sortChosen ? sort : null,
+      country,
+      institution,
+      domains,
+      researcher: selected?.id ?? pendingResearcher,
+    })
+    if (hash !== window.location.hash) window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}${hash}`)
+  }, [query, sort, search.sortChosen, country, institution, domains, selected, pendingResearcher])
+
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [visible, setVisible] = useState(PAGE_SIZE)
 
@@ -51,7 +82,12 @@ export default function App() {
 
   return (
     <div className="flex min-h-screen flex-col bg-white">
-      <Navbar onAboutClick={() => setAboutOpen(true)} facultyCount={coverage.totalRows || search.faculty.length} />
+      <Navbar
+        onAboutClick={() => setAboutOpen(true)}
+        onShortlistClick={() => setShortlistOpen(true)}
+        shortlistCount={shortlist.entries.length}
+        facultyCount={coverage.totalRows || search.faculty.length}
+      />
 
       <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-8 sm:px-6 lg:py-10">
         <div className="mb-8 max-w-3xl">
@@ -149,9 +185,12 @@ export default function App() {
             )}
 
             {!loading && !error && (
-              <p className="text-sm text-mit-gray">
-                {results.length.toLocaleString()} {results.length === 1 ? 'researcher' : 'researchers'}
-              </p>
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm text-mit-gray">
+                  {results.length.toLocaleString()} {results.length === 1 ? 'researcher' : 'researchers'}
+                </p>
+                {(query.trim() || activeFilterCount > 0) && <CopyLinkButton label="Copy link to this search" />}
+              </div>
             )}
 
             {loading ? (
@@ -183,7 +222,14 @@ export default function App() {
               <>
                 <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
                   {shown.map((f) => (
-                    <FacultyCard key={f.id} faculty={f} matchScore={scoreOf(f)} onSelect={() => setSelected(f)} />
+                    <FacultyCard
+                      key={f.id}
+                      faculty={f}
+                      matchScore={scoreOf(f)}
+                      onSelect={() => setSelected(f)}
+                      saved={shortlist.ids.has(f.id)}
+                      onToggleSave={() => shortlist.toggle(f)}
+                    />
                   ))}
                 </div>
                 {visible < results.length && (
@@ -216,7 +262,22 @@ export default function App() {
       <FacultyDetailModal
         faculty={selected}
         matchScore={selected ? scoreOf(selected) : undefined}
+        saved={selected ? shortlist.ids.has(selected.id) : false}
+        onToggleSave={shortlist.toggle}
+        explain={ai.explain}
         onClose={() => setSelected(null)}
+      />
+      <ShortlistModal
+        open={shortlistOpen}
+        onClose={() => setShortlistOpen(false)}
+        entries={shortlist.entries}
+        saved={shortlist.saved}
+        onUpdate={shortlist.update}
+        onRemove={shortlist.remove}
+        onOpen={(row) => {
+          setShortlistOpen(false)
+          setSelected(row)
+        }}
       />
       <AboutModal open={aboutOpen} onClose={() => setAboutOpen(false)} />
     </div>

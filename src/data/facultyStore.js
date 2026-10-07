@@ -61,6 +61,7 @@ function institutionFor(uni, fallback = {}) {
     name: uni?.name ?? fallback.name,
     country_code: uni?.country_code ?? fallback.country_code,
     rank: uni?.rank ?? fallback.rank,
+    homepage_url: uni?.homepage_url ?? fallback.homepage_url,
   }
 }
 

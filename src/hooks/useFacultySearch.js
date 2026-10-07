@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Index } from 'flexsearch'
 import { loadCatalog, loadUniversityRows } from '../data/facultyStore.js'
 import { piScoreOf } from '../lib/roles.js'
+import { parseHash } from '../lib/urlState.js'
 
 export const EMPTY_FILTERS = { country: '', institution: '', domains: [] }
 
@@ -89,12 +90,14 @@ export default function useFacultySearch() {
   const [pendingUniversities, setPendingUniversities] = useState(0)
   const loadedUniversities = useRef(new Set())
 
-  const [query, setQuery] = useState('')
-  const [filters, setFilters] = useState(EMPTY_FILTERS)
+  // A shared link carries the search (see lib/urlState.js); it is read once on load.
+  const [fromUrl] = useState(() => parseHash(typeof window === 'undefined' ? '' : window.location.hash))
+  const [query, setQuery] = useState(fromUrl.query)
+  const [filters, setFilters] = useState({ country: fromUrl.country, institution: fromUrl.institution, domains: fromUrl.domains })
   // "Likely PIs first" by default; AI matches switch to "Best match" until the
   // visitor picks a sort themselves.
-  const [sort, setSortState] = useState('pi')
-  const [sortChosen, setSortChosen] = useState(false)
+  const [sort, setSortState] = useState(fromUrl.sort ?? 'pi')
+  const [sortChosen, setSortChosen] = useState(Boolean(fromUrl.sort))
   const setSort = (value) => {
     setSortChosen(true)
     setSortState(value)
@@ -306,6 +309,7 @@ export default function useFacultySearch() {
     resetFilters: () => setFilters(EMPTY_FILTERS),
     activeFilterCount,
     sort,
+    sortChosen,
     setSort,
     matchScores,
     setMatchScores,

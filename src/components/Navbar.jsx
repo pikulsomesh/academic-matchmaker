@@ -1,6 +1,6 @@
-import { GraduationCap, Info } from 'lucide-react'
+import { GraduationCap, Info, Star } from 'lucide-react'
 
-export default function Navbar({ onAboutClick, facultyCount }) {
+export default function Navbar({ onAboutClick, onShortlistClick, shortlistCount = 0, facultyCount }) {
   return (
     <header className="sticky top-0 z-30 border-b border-gray-100 bg-white/90 backdrop-blur">
       <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4 sm:px-6">
@@ -17,6 +17,17 @@ export default function Navbar({ onAboutClick, facultyCount }) {
             </span>
           </span>
         </a>
+        <div className="flex shrink-0 items-center gap-2">
+        {onShortlistClick && (
+          <button
+            type="button"
+            onClick={onShortlistClick}
+            className="flex shrink-0 items-center gap-1.5 rounded-xl border border-gray-100 px-3 py-2 text-sm font-medium text-charcoal transition hover:border-cardinal/30 hover:text-cardinal"
+          >
+            <Star className={`h-4 w-4 ${shortlistCount ? 'fill-amber-400 text-amber-500' : ''}`} /> Shortlist
+            {shortlistCount > 0 && <span className="rounded-full bg-cardinal px-1.5 text-xs text-white">{shortlistCount}</span>}
+          </button>
+        )}
         <button
           type="button"
           onClick={onAboutClick}
@@ -24,6 +35,7 @@ export default function Navbar({ onAboutClick, facultyCount }) {
         >
           <Info className="h-4 w-4" /> About
         </button>
+        </div>
       </div>
     </header>
   )
