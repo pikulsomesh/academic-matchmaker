@@ -453,6 +453,7 @@ def build(args, client=None, web=None):
         "per_institution": args.per_institution,
         "window_years": args.window_years,
         "budget_reached": stats["pruned"] > 0,
+        "size_budget_mb": args.size_budget_mb,
         "pruned_for_size": stats["pruned"],
         "search_index_rows": stats["search_index_rows"],
         "search_index_complete": stats["search_index_complete"],

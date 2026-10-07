@@ -30,6 +30,10 @@ jobs:
           ONNXRUNTIME_NODE_INSTALL: skip
       - run: npm test
       - run: npm run build
+        env:
+          # With the data hosted in a Hugging Face dataset (scripts/hf_sync.py), the site reads it from
+          # there and falls back to the bundled public/data while the dataset is empty.
+          VITE_DATA_URL: ${{ vars.HF_DATASET_REPO && format('https://huggingface.co/datasets/{0}/resolve/main/', vars.HF_DATASET_REPO) || '' }}
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

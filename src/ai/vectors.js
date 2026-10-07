@@ -113,6 +113,7 @@ export function rankByCosine(query, { ids, dim, matrix }, limit = Infinity) {
 // instead of being expanded to Float32 unit vectors, which keeps 100k faculty
 // at ~40 MB of memory instead of ~150 MB. float32 files decode as before.
 export function decodeEmbeddingShard(json) {
+  if (json.dtype === 'bits') return decodeBitsShard(json)
   if (json.dtype !== 'int8') return decodeEmbeddingIndex(json)
   const { ids, dim, data } = json
   if (json.model && json.model !== EMBEDDING_MODEL) {
@@ -130,8 +131,47 @@ export function decodeEmbeddingShard(json) {
     for (let i = r * dim, end = i + dim; i < end; i++) sum += int8[i] * int8[i]
     invNorm[r] = sum ? 1 / Math.sqrt(sum) : 0
   }
-  // Vector clusters (vectors/<n>.json) may list each person's university.
-  return { ids, dim, int8, invNorm, institutionIds: json.institution_ids }
+  return { ids, dim, int8, invNorm, institutionIds: clusterInstitutions(json) }
+}
+
+// Vector clusters (vectors/<n>.json) list each person's university, as
+// indexes into the cluster's own table (or, in older builds, as ids).
+function clusterInstitutions(json) {
+  if (json.institution_index && json.institutions) return json.institution_index.map((n) => json.institutions[n])
+  return json.institution_ids
+}
+
+// 1-bit vectors: dimension i is set when the faculty vector's value is
+// positive, packed 8 per byte (byte i >> 3, mask 0x80 >> (i & 7)), 48 bytes
+// per person instead of 384. See pack_bits in scripts/build_search_index.py.
+function decodeBitsShard(json) {
+  const { ids, dim, data } = json
+  if (dim !== EMBEDDING_DIM) throw new Error(`Expected ${EMBEDDING_DIM}-dim embeddings, got ${dim}`)
+  const bits = base64ToBytes(data)
+  if (bits.length !== ids.length * (dim / 8)) {
+    throw new Error(`Embedding data has ${bits.length} bytes, expected ${ids.length * (dim / 8)}`)
+  }
+  return { ids, dim, bits, institutionIds: clusterInstitutions(json) }
+}
+
+// For a unit query q and a sign vector s (each entry ±1), q·s / sqrt(dim) is
+// about sqrt(2/π) times the cosine with the original vector, so dividing by
+// this keeps bit scores on the same 0–1 scale as int8 scores.
+const BITS_SCALE = Math.sqrt(2 / Math.PI)
+
+// Per-byte partial sums: table[j * 256 + b] is q·s over the 8 dimensions of
+// byte j when that byte holds b. A person's score is then 48 lookups.
+function bitsTable(q, dim) {
+  const bytes = dim / 8
+  const table = new Float32Array(bytes * 256)
+  for (let j = 0; j < bytes; j++) {
+    for (let b = 0; b < 256; b++) {
+      let sum = 0
+      for (let k = 0; k < 8; k++) sum += b & (0x80 >> k) ? q[j * 8 + k] : -q[j * 8 + k]
+      table[j * 256 + b] = sum
+    }
+  }
+  return table
 }
 
 // rankByCosine across several decoded indexes (float matrices from
@@ -140,8 +180,21 @@ export function decodeEmbeddingShard(json) {
 export function rankIndexes(query, indexes, limit = Infinity, allowed = null) {
   const q = normalize(query)
   const scored = []
+  let table = null
   for (const index of indexes) {
     const { ids, dim } = index
+    if (index.bits) {
+      table ??= bitsTable(q, dim)
+      const bytes = dim / 8
+      const scale = 1 / (Math.sqrt(dim) * BITS_SCALE)
+      for (let r = 0; r < ids.length; r++) {
+        if (allowed && !allowed.has(ids[r])) continue
+        let dot = 0
+        for (let j = 0, offset = r * bytes; j < bytes; j++) dot += table[j * 256 + index.bits[offset + j]]
+        scored.push({ id: ids[r], score: Math.min(1, dot * scale), institutionId: index.institutionIds?.[r] ?? index.institutionId })
+      }
+      continue
+    }
     const values = index.matrix ?? index.int8
     for (let r = 0; r < ids.length; r++) {
       if (allowed && !allowed.has(ids[r])) continue

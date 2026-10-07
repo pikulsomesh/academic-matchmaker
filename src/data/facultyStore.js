@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
 import { decodeEmbeddingShard, rankIndexes } from '../ai/vectors.js'
+import { decodeSearchFile } from './compactRows.js'
 
 // Loads the published data in public/data/ (layout: scripts/README.md).
 //
 // The catalog is faculty_search.json: one slim row per faculty member, enough
-// to search, filter and draw cards. Full records live in one file per
+// to search, filter and draw cards (compact arrays, see compactRows.js). Full records live in one file per
 // university (faculty/<id>.json) and are fetched only when the detail view
 // needs them. Older builds without faculty_search.json publish a single
 // faculty_index.json instead, which is used as both catalog and record store.
@@ -14,10 +15,29 @@ import { decodeEmbeddingShard, rankIndexes } from '../ai/vectors.js'
 // search/<id>.json file with all of its rows; loadUniversityRows() fetches
 // those when a visitor narrows to a country or university.
 
-const DATA_URL = `${import.meta.env.BASE_URL}data/`
+// The data ships with the site (public/data), or is hosted in a Hugging Face
+// dataset when the build sets VITE_DATA_URL. The bundled copy is the fallback
+// while the hosted one is unreachable or still empty.
+const LOCAL_DATA_URL = `${import.meta.env.BASE_URL}data/`
+const HOSTED_DATA_URL = import.meta.env.VITE_DATA_URL || ''
+let dataUrlRequest = null
+
+function dataUrl() {
+  dataUrlRequest ??= (async () => {
+    if (!HOSTED_DATA_URL) return LOCAL_DATA_URL
+    try {
+      const res = await fetch(`${HOSTED_DATA_URL}universities.json`, { method: 'HEAD', signal: AbortSignal.timeout(5000) })
+      if (res.ok) return HOSTED_DATA_URL
+    } catch (err) {
+      console.warn('Hosted data unavailable, using the bundled copy.', err)
+    }
+    return LOCAL_DATA_URL
+  })()
+  return dataUrlRequest
+}
 
 async function fetchJson(path) {
-  const res = await fetch(`${DATA_URL}${path}`)
+  const res = await fetch(`${await dataUrl()}${path}`)
   const type = res.headers.get('content-type') ?? ''
   // Vite's dev server answers missing files with index.html.
   if (!res.ok || type.includes('text/html')) throw new Error(`${path}: ${res.status}`)
@@ -99,7 +119,7 @@ export function loadCatalog() {
     const uniByName = new Map(universities.map((u) => [u.name, u]))
     vectorsInfo = metadata?.vectors?.k ? metadata.vectors : null
 
-    const search = await tryJson('faculty_search.json', null)
+    const search = await tryJson('faculty_search.json', null).then((json) => (json ? decodeSearchFile(json) : null))
     if (Array.isArray(search)) {
       const rows = search.map((r) => rowFromSearch(r, uniById))
       catalogPartial = metadata?.search_index_complete === false && universities.some((u) => u.search_file)
@@ -131,7 +151,7 @@ export async function loadUniversityRows(institutionIds) {
     while (next < unis.length) {
       const uni = unis[next++]
       if (!rowRequests.has(uni.id)) {
-        const request = fetchJson(uni.search_file).then((list) => list.map((r) => rowFromSearch(r, uniById)))
+        const request = fetchJson(uni.search_file).then((json) => decodeSearchFile(json).map((r) => rowFromSearch(r, uniById)))
         request.catch(() => rowRequests.delete(uni.id))
         rowRequests.set(uni.id, request)
       }

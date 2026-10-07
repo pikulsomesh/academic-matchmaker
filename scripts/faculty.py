@@ -196,7 +196,28 @@ EMBEDDING_SHARD_DIR = "embeddings"
 COMBINED_LIMIT = 30000
 SEARCH_SHARD_DIR = "search"
 RECORD_CHUNK = 1000    # people per full-record file once a university is bigger than this
-EMBEDDING_BYTES = 560  # one int8 vector (384) as base64 plus its id, per person
+# Published bytes per person for each vector format (vectors/<n>.json): base64 data plus id and university.
+VECTOR_BYTES = {"int8": 560, "bits": 84}
+COVERAGE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config", "coverage.json")
+
+
+def coverage_config():
+    return read_json(COVERAGE_PATH, {}) or {}
+
+
+def vector_format(coverage=None):
+    """'bits' (1 bit per dimension, the default) or 'int8', from coverage.json vector_format."""
+    fmt = (coverage if coverage is not None else coverage_config()).get("vector_format", "bits")
+    return fmt if fmt in VECTOR_BYTES else "bits"
+
+
+def size_budget_mb(coverage=None):
+    """The data size cap: hosted_size_budget_mb while the data is published to Hugging Face
+    (HF_DATASET_REPO set), else size_budget_mb (GitHub Pages' 1 GB site limit)."""
+    coverage = coverage if coverage is not None else coverage_config()
+    if os.environ.get("HF_DATASET_REPO") and coverage.get("hosted_size_budget_mb"):
+        return coverage["hosted_size_budget_mb"]
+    return coverage.get("size_budget_mb")
 
 
 def shard_paths(institution_id):
@@ -231,9 +252,114 @@ def importance(record):
 
 
 def estimated_bytes(record):
-    """What one person costs on disk: full record + two slim rows (global index and university file) + vector."""
-    return (len(json.dumps(record, ensure_ascii=False)) + 2 * len(json.dumps(search_row(record), ensure_ascii=False))
-            + EMBEDDING_BYTES)
+    """What one person costs on disk: full record + one compact search row + vector.
+
+    The global faculty_search.json repeats the top search_index_rows people (about 12 MB at 100k), which
+    is small enough to leave out of a per-person estimate."""
+    row = _compact_values(search_row(record), lambda _field, _value: 0)
+    return (len(json.dumps(record, ensure_ascii=False, separators=(",", ":")))
+            + len(json.dumps(row, ensure_ascii=False, separators=(",", ":"))) + VECTOR_BYTES[vector_format()])
+
+
+# --- compact search files ------------------------------------------------------------------
+#
+# faculty_search.json and search/<institution id>.json hold one array per person instead of one object:
+#   {"format": "compact-v1", "fields": [...SEARCH_FIELDS], "institutions": [ids], "domains": [names],
+#    "record_files": [paths], "url_prefixes": [...], "rows": [[...], ...]}
+# Row values follow `fields`; trailing nulls are dropped. institution_id, primary_domain, record_file and each
+# entry of domains are indexes into the tables above; profile_url "<n>|rest" means url_prefixes[n] + rest.
+# has_email is not stored (it is Boolean(email)). Decoded rows equal search_row() output.
+# src/data/compactRows.js reads this format; keep the two in step.
+
+SEARCH_FORMAT = "compact-v1"
+SEARCH_FIELDS = ["id", "name", "title", "institution_id", "primary_domain", "domains", "citation_count", "email",
+                 "profile_url", "seniority_score", "first_author_recent", "last_author_recent", "recent_works",
+                 "last_publication_year", "record_file"]
+URL_PREFIXES = ["https://orcid.org/", "https://openalex.org/"]
+TABLE_OF = {"institution_id": "institutions", "primary_domain": "domains", "domains": "domains",
+            "record_file": "record_files"}
+
+
+def compact_url(url):
+    for n, prefix in enumerate(URL_PREFIXES):
+        if url.startswith(prefix):
+            return f"{n}|{url[len(prefix):]}"
+    return url
+
+
+def _compact_values(row, index_of):
+    """One search_row() as a compact-v1 array; index_of(field, value) -> table index."""
+    values = []
+    for field in SEARCH_FIELDS:
+        value = row.get(field)
+        if value is None or value == []:
+            value = None
+        elif field == "domains":
+            value = [index_of(field, name) for name in value]
+        elif field in TABLE_OF:
+            value = index_of(field, value)
+        elif field == "profile_url":
+            value = compact_url(value)
+        values.append(value)
+    while values and values[-1] is None:
+        values.pop()
+    return values
+
+
+def compact_search_file(rows):
+    """search_row() dicts -> a compact-v1 file (see above)."""
+    tables = {"institutions": [], "domains": [], "record_files": []}
+    positions = {name: {} for name in tables}
+
+    def index_of(field, value):
+        name = TABLE_OF[field]
+        if value not in positions[name]:
+            positions[name][value] = len(tables[name])
+            tables[name].append(value)
+        return positions[name][value]
+
+    encoded = [_compact_values(row, index_of) for row in rows]
+    return {"format": SEARCH_FORMAT, "fields": SEARCH_FIELDS, **tables, "url_prefixes": URL_PREFIXES, "rows": encoded}
+
+
+def decode_search_file(data):
+    """compact-v1 file (or a plain list of rows) -> search_row() dicts."""
+    if isinstance(data, list):
+        return data
+    tables = {name: data.get(name) or [] for name in ("institutions", "domains", "record_files")}
+    prefixes = data.get("url_prefixes") or []
+    rows = []
+    for values in data["rows"]:
+        row = {}
+        for field, value in zip(data["fields"], values + [None] * (len(data["fields"]) - len(values))):
+            if value is not None and field == "domains":
+                value = [tables["domains"][i] for i in value]
+            elif value is not None and field in TABLE_OF:
+                value = tables[TABLE_OF[field]][value]
+            elif value is not None and field == "profile_url" and "|" in value[:4]:
+                n, rest = value.split("|", 1)
+                value = prefixes[int(n)] + rest if n.isdigit() else value
+            row[field] = value
+        row["domains"] = row.get("domains") or []
+        row["has_email"] = bool(row.get("email"))
+        rows.append(row)
+    return rows
+
+
+def write_search_file(rows, path):
+    """A compact-v1 search file, one person per line."""
+    data = compact_search_file(rows)
+    body = data.pop("rows")
+    head = json.dumps(data, ensure_ascii=False, separators=(",", ":"))[:-1]
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as fh:
+        fh.write(head + ',"rows":[\n')
+        for i, values in enumerate(body):
+            fh.write(json.dumps(values, ensure_ascii=False, separators=(",", ":")))
+            fh.write(",\n" if i < len(body) - 1 else "\n")
+        fh.write("]}\n")
+    os.replace(tmp, path)
 
 
 def prune_to_budget(records, budget_bytes):
@@ -298,7 +424,7 @@ def write_records(records, universities, data_dir, combined_limit=COMBINED_LIMIT
         uni.pop("search_file", None)
         if not complete:
             uni["search_file"] = f"{SEARCH_SHARD_DIR}/{uni['id']}.json"
-            write_faculty_index([search_row(r, file_of[r["id"]]) for r in people], os.path.join(data_dir, uni["search_file"]))
+            write_search_file([search_row(r, file_of[r["id"]]) for r in people], os.path.join(data_dir, uni["search_file"]))
     shard_dir = os.path.join(data_dir, FACULTY_SHARD_DIR)
     for name in os.listdir(shard_dir):  # universities dropped from the config, or files that became chunks
         if name not in keep:
@@ -306,7 +432,7 @@ def write_records(records, universities, data_dir, combined_limit=COMBINED_LIMIT
             shutil.rmtree(full) if os.path.isdir(full) else os.remove(full)
 
     top = records if complete else sorted(records, key=importance, reverse=True)[:search_index_rows]
-    write_faculty_index([search_row(r, file_of[r["id"]]) for r in top], os.path.join(data_dir, "faculty_search.json"))
+    write_search_file([search_row(r, file_of[r["id"]]) for r in top], os.path.join(data_dir, "faculty_search.json"))
     write_json(os.path.join(data_dir, "universities.json"), universities)
     write_domains(records, os.path.join(data_dir, "domains.json"))
     combined = os.path.join(data_dir, "faculty_index.json")

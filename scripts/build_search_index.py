@@ -26,7 +26,7 @@ import urllib.request
 
 import numpy as np
 
-from faculty import DATA_DIR, load_records, now_iso, read_json, write_json
+from faculty import DATA_DIR, load_records, now_iso, read_json, vector_format, write_json
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MODEL_ID = "Xenova/all-MiniLM-L6-v2"
@@ -148,11 +148,19 @@ def kmeans(unit, k, seed=0):
     return centroids
 
 
-def build_ivf(ids, q, out_dir, k=None, institution_ids=None):
+def pack_bits(q):
+    """Sign bits of int8 vectors, packed 8 per byte: dimension i is byte i // 8, mask 0x80 >> (i % 8)."""
+    return np.packbits(q > 0, axis=1)
+
+
+def build_ivf(ids, q, out_dir, k=None, institution_ids=None, vector_format="bits"):
     """IVF index for the browser: centroids.json plus one file of member ids and vectors per cluster.
 
-    The browser embeds the query, ranks the centroids, loads the nearest clusters and ranks those exactly.
-    -> {"k", "dim", "model", "count"}
+    The browser embeds the query, ranks the centroids, loads the nearest clusters and ranks those.
+    Cluster vectors are int8 (384 bytes each) or, with vector_format "bits", 1 bit per dimension
+    (48 bytes), scored in the browser against the full-precision query. Centroids stay int8.
+    Each cluster lists its people's universities as indexes into its own `institutions` table.
+    -> {"k", "dim", "model", "count", "dtype"}
     """
     root = os.path.join(out_dir, VECTORS_DIR)
     shutil.rmtree(root, ignore_errors=True)
@@ -167,14 +175,20 @@ def build_ivf(ids, q, out_dir, k=None, institution_ids=None):
     write_json(os.path.join(root, "centroids.json"), {
         "k": k, "dim": DIM, "dtype": "int8", "scale": SCALE, "model": MODEL_ID,
         "data": base64.b64encode(quantize(centroids).tobytes()).decode("ascii")}, compact=True)
+    bits = vector_format == "bits"
     for c in range(k):
         rows = np.flatnonzero(assignment == c)
-        write_json(os.path.join(root, f"{c}.json"), {
-            "ids": [ids[i] for i in rows],
-            "institution_ids": [institution_ids[i] for i in rows] if institution_ids else [],
-            "dim": DIM, "dtype": "int8", "scale": SCALE,
-            "data": base64.b64encode(q[rows].tobytes()).decode("ascii")}, compact=True)
-    return {"k": k, "dim": DIM, "model": MODEL_ID, "count": n}
+        part = {"ids": [ids[i] for i in rows], "dim": DIM}
+        if institution_ids:
+            table = sorted({institution_ids[i] for i in rows})
+            position = {inst: n for n, inst in enumerate(table)}
+            part.update(institutions=table, institution_index=[position[institution_ids[i]] for i in rows])
+        if bits:
+            part.update(dtype="bits", data=base64.b64encode(pack_bits(q[rows]).tobytes()).decode("ascii"))
+        else:
+            part.update(dtype="int8", scale=SCALE, data=base64.b64encode(q[rows].tobytes()).decode("ascii"))
+        write_json(os.path.join(root, f"{c}.json"), part, compact=True)
+    return {"k": k, "dim": DIM, "model": MODEL_ID, "count": n, "dtype": "bits" if bits else "int8"}
 
 
 def site_reads_vectors():
@@ -219,7 +233,8 @@ def main(argv=None, encoder=None):
         write_json(os.path.join(args.data_dir, uni["embeddings_file"]),
                    payload(shard_ids, [texts[i] for i in rows], q[rows]), compact=True)
     write_json(os.path.join(args.data_dir, "universities.json"), universities)
-    vectors = build_ivf(ids, q, args.data_dir, institution_ids=[r["institution"].get("id") for r in records])
+    vectors = build_ivf(ids, q, args.data_dir, institution_ids=[r["institution"].get("id") for r in records],
+                        vector_format=vector_format())
 
     # The single-file version exists exactly when faculty_index.json does.
     combined = os.path.join(args.data_dir, "faculty_embeddings.json")

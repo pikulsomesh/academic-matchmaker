@@ -3,6 +3,7 @@
   "target_per_institution": 50000,
   "window_years": 10,
   "size_budget_mb": 800,
+  "hosted_size_budget_mb": 8000,
   "search_index_rows": 100000,
   "tiers": [
     {
@@ -35,5 +36,6 @@
       "min_citations": 1,
       "min_h_index": 1
     }
-  ]
+  ],
+  "vector_format": "bits"
 }

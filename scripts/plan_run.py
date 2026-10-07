@@ -70,8 +70,19 @@ def site_reads_chunks(src_dir=SRC_DIR):
     return False
 
 
-def plan(event, schedule, mode_input, per_institution_input, metadata, coverage, shards_ready, chunks_ready=True):
-    """-> (mode, per_institution, reason). mode is 'full', 'cdc' or 'skip'."""
+def budget_mb(coverage, hosted=False):
+    """Data size cap: hosted_size_budget_mb once the data is published to Hugging Face, else size_budget_mb
+    (GitHub Pages' 1 GB site limit). Mirrors faculty.size_budget_mb()."""
+    if hosted and coverage.get("hosted_size_budget_mb"):
+        return coverage["hosted_size_budget_mb"]
+    return coverage.get("size_budget_mb", 800)
+
+
+def plan(event, schedule, mode_input, per_institution_input, metadata, coverage, shards_ready, chunks_ready=True,
+         hosted=False):
+    """-> (mode, per_institution, reason). mode is 'full', 'cdc' or 'skip'.
+
+    hosted: the data is published to Hugging Face (bigger size budget)."""
     target = tier_sizes(coverage)[-1]
     if event == "workflow_dispatch":
         mode = mode_input or "cdc"
@@ -83,7 +94,8 @@ def plan(event, schedule, mode_input, per_institution_input, metadata, coverage,
         initial = int(coverage.get("initial_per_institution", 200))
         return "full", initial, f"first full build at {initial} per institution"
     built = int(metadata.get("per_institution") or 200)
-    if metadata.get("budget_reached"):
+    reached_at = metadata.get("size_budget_mb") or coverage.get("size_budget_mb", 800)
+    if metadata.get("budget_reached") and budget_mb(coverage, hosted) <= reached_at:
         return "skip", built, "size budget reached; coverage stops growing"
     bigger = [size for size in tier_sizes(coverage) if size > built]
     if not bigger:
@@ -108,6 +120,7 @@ def main(argv=None):
         read_json(COVERAGE_CONFIG),
         site_reads_shards(),
         site_reads_chunks(),
+        hosted=bool(os.environ.get("HF_DATASET_REPO")),
     )
     print(f"Plan: {mode} ({reason})", file=sys.stderr)
     out = os.environ.get("GITHUB_OUTPUT")
@@ -116,7 +129,7 @@ def main(argv=None):
     lines = (f"mode={mode}\nper_institution={per_institution}\n"
              f"min_works={tier.get('min_works', 20)}\nmin_citations={tier.get('min_citations', 500)}\n"
              f"min_h_index={tier.get('min_h_index', 10)}\nwindow_years={coverage.get('window_years', 10)}\n"
-             f"size_budget_mb={coverage.get('size_budget_mb', 800)}\n"
+             f"size_budget_mb={budget_mb(coverage, bool(os.environ.get('HF_DATASET_REPO')))}\n"
              f"search_index_rows={coverage.get('search_index_rows', 100000)}\n")
     if out:
         with open(out, "a", encoding="utf-8") as fh:
