@@ -10,9 +10,9 @@ Python 3.10+. `pip install -r scripts/requirements.txt`
 
 `.github/workflows/monthly-cdc-update.yml` runs `cdc_update.py` + `build_search_index.py` at
 00:00 UTC on the 1st of each month, commits `public/data/`, then starts `deploy.yml`.
-Run it by hand from the Actions tab with **mode = full** to do the first full ingestion
-(a full run of 100 institutions takes a few hours; if it hits the job time limit, re-run it
-and it resumes from its cache).
+Run it by hand from the Actions tab with **mode = full** to do the first full ingestion. A full
+run takes hours. If it stops (time limit or OpenAlex's daily budget), run it again, the next day
+if the budget ran out, and it resumes from its saved cache.
 
 Set the repository secret `OPENALEX_API_KEY` (free at openalex.org/settings/api). OpenAlex bills
 per request: without a key the daily budget is about 1,000 list calls, with a free key about
@@ -25,8 +25,9 @@ If the budget runs out mid-run, re-run the next day and it resumes from the cach
    resolved to an OpenAlex institution; the id is written back to the config so you can check
    or pin it. `email_domains` (optional) adds accepted email domains beyond the homepage's.
 2. **Faculty**: OpenAlex authors whose last known institution is that university, with at least
-   20 works, 500 citations, h-index 10 and a paper in the last 3 years, most cited first, up to
-   200 per institution (all adjustable by flags).
+   20 works, 500 citations, h-index 10 and a paper in the last 3 years, most cited first. Everyone
+   passing those thresholds is kept, up to `--per-institution` (script default 1000; the workflow
+   uses 200 until the website reads the per-university files below).
 3. **Domains**: from the author's OpenAlex topics. `domain_weights` = share of works per OpenAlex
    subfield (top 5); `primary_domain` = the OpenAlex field with the largest share.
 4. **Contacts**, in order of preference:
@@ -45,16 +46,22 @@ verified ones. `--require-contact` drops records with neither an email nor an in
 
 ## Output files (`public/data/`)
 
-- `faculty_index.json`: array, one record per line. Blueprint schema plus `institution.id`,
-  `h_index`, `works_count`, `orcid`, `profile_source`, `flags`, and `id`/`date` on each publication.
-- `universities.json`: `[{id, name, country_code, rank, homepage_url, faculty_count}]`
+- `universities.json`: `[{id, name, country_code, rank, homepage_url, faculty_count, faculty_file, embeddings_file}]`
+- `faculty/<institution id>.json`: that university's records, one per line. Blueprint schema plus
+  `institution.id`, `h_index`, `works_count`, `orcid`, `profile_source`, `flags`, and `id`/`date`
+  on each publication. Verified records first.
+- `embeddings/<institution id>.json`: embeddings for the matching faculty file, same row order (format below).
+- `faculty_search.json`: one slim row per faculty member, for search, facets and cards before a
+  university's file is loaded: `{id, name, title, institution_id, primary_domain, domains, citation_count, has_email}`.
 - `domains.json`: sorted array of every domain name used in `primary_domain` / `domain_weights`.
 - `metadata.json`: `generated_at`, `last_ingestion`, `last_cdc_run`, counts, last CDC stats.
-- `faculty_embeddings.json`: see below.
+- `faculty_index.json` + `faculty_embeddings.json`: the same data as single files. Written only while
+  the index has at most 30,000 records (`COMBINED_LIMIT` in `faculty.py`) and deleted above that,
+  since one file that large is too slow for the browser.
 
 ## Embedding format
 
-`faculty_embeddings.json` follows the contract read by `decodeEmbeddingIndex()` in `src/ai/vectors.js`:
+Every embeddings file (`embeddings/<id>.json` and `faculty_embeddings.json`) follows the contract read by `decodeEmbeddingIndex()` in `src/ai/vectors.js`:
 
 ```json
 {"model": "Xenova/all-MiniLM-L6-v2", "dim": 384, "dtype": "int8", "scale": 127,

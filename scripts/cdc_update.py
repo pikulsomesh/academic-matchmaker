@@ -22,8 +22,8 @@ import sys
 from datetime import date, timedelta
 
 from faculty import (AUTHOR_SELECT, DATA_DIR, WORK_SELECT, compute_domains, contact_flags, merge_publications,
-                     now_iso, publication_entry, read_json, today_iso, write_domains, write_faculty_index,
-                     write_json)
+                     load_records, now_iso, publication_entry, read_json, today_iso, write_json,
+                     write_records)
 from openalex import MAX_OR_VALUES, OpenAlexClient, chunks, short_id
 
 
@@ -50,11 +50,9 @@ def refresh_authors(client, author_ids):
 
 
 def run(data_dir, client, overlap_days=30, since=None, until=None):
-    index_path = os.path.join(data_dir, "faculty_index.json")
     meta_path = os.path.join(data_dir, "metadata.json")
-    records = read_json(index_path, [])
+    records, universities = load_records(data_dir)
     meta = read_json(meta_path, {})
-    universities = read_json(os.path.join(data_dir, "universities.json"), [])
     if not meta.get("last_ingestion"):
         raise SystemExit("No metadata.json from a full ingestion yet (the repo still holds sample data). "
                          "Run initial_ingestion.py first, or the workflow with mode=full.")
@@ -101,8 +99,7 @@ def run(data_dir, client, overlap_days=30, since=None, until=None):
         record["flags"] = contact_flags(record)
         refreshed += 1
 
-    write_faculty_index(records, index_path)
-    write_domains(records, os.path.join(data_dir, "domains.json"))
+    write_records(records, universities, data_dir)
     meta.update({
         "generated_at": now_iso(),
         "last_cdc_run": until,
