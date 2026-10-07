@@ -44,20 +44,30 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .cache/models
-          key: minilm-l6-v2-quantized
+          key: minilm-l6-v2-onnx-fp32
 
-      # A full run that hits the time limit can be re-run and resumes from this cache.
-      - name: Cache ingestion responses
+      # A full build can outlast one job (time limit) or one day of OpenAlex budget. Its
+      # responses are cached as it goes and saved even when the step fails, so re-running
+      # the workflow resumes where the last attempt stopped.
+      - name: Restore ingestion cache
         if: inputs.mode == 'full'
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: .cache/ingestion
-          key: ingestion-${{ github.run_id }}
+          key: ingestion-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: ingestion-
 
       - name: Full ingestion
         if: inputs.mode == 'full'
-        run: python scripts/initial_ingestion.py --per-institution "${{ inputs.per_institution }}"
+        timeout-minutes: 300
+        run: python scripts/initial_ingestion.py --per-institution "${{ inputs.per_institution || '200' }}"
+
+      - name: Save ingestion cache
+        if: always() && inputs.mode == 'full'
+        uses: actions/cache/save@v4
+        with:
+          path: .cache/ingestion
+          key: ingestion-${{ github.run_id }}-${{ github.run_attempt }}
 
       - name: Monthly CDC update
         if: inputs.mode != 'full'

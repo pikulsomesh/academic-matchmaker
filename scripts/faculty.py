@@ -133,3 +133,78 @@ def write_domains(records, path):
         if record.get("primary_domain"):
             names.add(record["primary_domain"])
     write_json(path, sorted(names))
+
+
+# --- sharded output ---------------------------------------------------------------------
+#
+# public/data/faculty/<institution id>.json      full records for one university
+# public/data/embeddings/<institution id>.json   embeddings for that file (faculty_embeddings contract)
+# public/data/faculty_search.json                slim row per faculty member for search and facets
+# universities.json carries faculty_file / embeddings_file for each university.
+#
+# The single-file faculty_index.json is still written while the index is small enough for
+# the browser to download in one go (COMBINED_LIMIT), so the site keeps working until it
+# reads the shards; above the limit it is removed rather than left stale.
+
+FACULTY_SHARD_DIR = "faculty"
+EMBEDDING_SHARD_DIR = "embeddings"
+COMBINED_LIMIT = 30000
+
+
+def shard_paths(institution_id):
+    return (f"{FACULTY_SHARD_DIR}/{institution_id}.json", f"{EMBEDDING_SHARD_DIR}/{institution_id}.json")
+
+
+def search_row(record):
+    """Slim record for faculty_search.json: enough to search, filter, sort and draw a card."""
+    return {
+        "id": record["id"],
+        "name": record["name"],
+        "title": record.get("title"),
+        "institution_id": record["institution"].get("id"),
+        "primary_domain": record.get("primary_domain"),
+        "domains": [name for name, _ in sorted((record.get("domain_weights") or {}).items(), key=lambda kv: -kv[1])],
+        "citation_count": record.get("citation_count", 0),
+        "email": record.get("email"),
+        "profile_url": record.get("profile_url"),
+        "has_email": bool(record.get("email")),
+    }
+
+
+def write_records(records, universities, data_dir, combined_limit=COMBINED_LIMIT):
+    """Write shards, the slim search index, universities.json, domains.json and (when small) faculty_index.json."""
+    by_inst = {}
+    for record in records:
+        by_inst.setdefault(record["institution"].get("id"), []).append(record)
+    os.makedirs(os.path.join(data_dir, FACULTY_SHARD_DIR), exist_ok=True)
+    keep = set()
+    for uni in universities:
+        faculty_file, embeddings_file = shard_paths(uni["id"])
+        uni["faculty_file"], uni["embeddings_file"] = faculty_file, embeddings_file
+        uni["faculty_count"] = len(by_inst.get(uni["id"], []))
+        write_faculty_index(by_inst.get(uni["id"], []), os.path.join(data_dir, faculty_file))
+        keep.add(os.path.basename(faculty_file))
+    shard_dir = os.path.join(data_dir, FACULTY_SHARD_DIR)
+    for name in os.listdir(shard_dir):  # universities dropped from the config
+        if name.endswith(".json") and name not in keep:
+            os.remove(os.path.join(shard_dir, name))
+
+    write_faculty_index([search_row(r) for r in records], os.path.join(data_dir, "faculty_search.json"))
+    write_json(os.path.join(data_dir, "universities.json"), universities)
+    write_domains(records, os.path.join(data_dir, "domains.json"))
+    combined = os.path.join(data_dir, "faculty_index.json")
+    if len(records) <= combined_limit:
+        write_faculty_index(records, combined)
+    elif os.path.exists(combined):
+        os.remove(combined)
+
+
+def load_records(data_dir):
+    """All records, from the shards when present, else from faculty_index.json."""
+    universities = read_json(os.path.join(data_dir, "universities.json"), [])
+    if universities and all(u.get("faculty_file") for u in universities):
+        records = []
+        for uni in universities:
+            records.extend(read_json(os.path.join(data_dir, uni["faculty_file"]), []))
+        return records, universities
+    return read_json(os.path.join(data_dir, "faculty_index.json"), []), universities

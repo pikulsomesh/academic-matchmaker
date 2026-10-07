@@ -32,7 +32,7 @@ import requests
 import contacts
 from faculty import (AUTHOR_SELECT, DATA_DIR, MAX_RECENT_PUBLICATIONS, WORK_SELECT, compute_domains,
                      contact_flags, merge_publications, now_iso, publication_entry, read_json, today_iso,
-                     verification_rank, write_domains, write_faculty_index, write_json)
+                     verification_rank, write_json, write_records)
 from openalex import OpenAlexClient, RateLimiter, chunks, short_id
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -336,7 +336,8 @@ def parse_args(argv=None):
     p.add_argument("--config", default=CONFIG_PATH)
     p.add_argument("--out-dir", default=DATA_DIR)
     p.add_argument("--institutions", type=int, default=None, help="only the first N institutions (testing)")
-    p.add_argument("--per-institution", type=int, default=200, help="max faculty kept per institution")
+    p.add_argument("--per-institution", type=int, default=1000,
+                   help="cap per institution; everyone passing the thresholds below is kept up to this")
     p.add_argument("--min-works", type=int, default=20)
     p.add_argument("--min-citations", type=int, default=500)
     p.add_argument("--min-h-index", type=int, default=10)
@@ -405,9 +406,7 @@ def main(argv=None, client=None, web=None):
         unique.setdefault(record["id"], record)
     records = sorted(unique.values(), key=lambda r: (verification_rank(r), r["institution"]["rank"], -r["citation_count"]))
 
-    write_faculty_index(records, os.path.join(args.out_dir, "faculty_index.json"))
-    write_json(os.path.join(args.out_dir, "universities.json"), universities)
-    write_domains(records, os.path.join(args.out_dir, "domains.json"))
+    write_records(records, universities, args.out_dir)
     with_email = sum(1 for r in records if r["email"])
     write_json(os.path.join(args.out_dir, "metadata.json"), {
         "generated_at": now_iso(),

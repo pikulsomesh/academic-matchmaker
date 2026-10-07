@@ -6,8 +6,10 @@ the browser, with the same post-processing as
 `pipeline('feature-extraction', ..., {pooling: 'mean', normalize: true})`, so browser query
 vectors and these faculty vectors share one space.
 
-Output: public/data/faculty_embeddings.json, the contract read by src/ai/vectors.js
-(decodeEmbeddingIndex):
+Output: public/data/embeddings/<institution id>.json per university (rows match
+public/data/faculty/<institution id>.json), plus public/data/faculty_embeddings.json while the
+single-file faculty_index.json exists. Each file follows the contract read by
+src/ai/vectors.js (decodeEmbeddingIndex):
   {"model": "Xenova/all-MiniLM-L6-v2", "dim": 384, "dtype": "int8", "scale": 127,
    "ids": [...], "data": "<base64 of ids.length x 384 int8, row-major>", ...}
 int8 value = round(x * 127) of the unit vector; row i belongs to ids[i].
@@ -22,7 +24,7 @@ import urllib.request
 
 import numpy as np
 
-from faculty import DATA_DIR, now_iso, read_json, write_json
+from faculty import DATA_DIR, load_records, now_iso, read_json, write_json
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MODEL_ID = "Xenova/all-MiniLM-L6-v2"
@@ -106,17 +108,9 @@ def build(records, encoder, batch_size=64):
     return texts, out
 
 
-def main(argv=None, encoder=None):
-    p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--data-dir", default=DATA_DIR)
-    p.add_argument("--batch-size", type=int, default=64)
-    args = p.parse_args(argv)
-
-    records = read_json(os.path.join(args.data_dir, "faculty_index.json"), [])
-    encoder = encoder or MiniLMEncoder()
-    texts, vectors = build(records, encoder, args.batch_size)
-    q = quantize(vectors)
-    write_json(os.path.join(args.data_dir, "faculty_embeddings.json"), {
+def payload(ids, texts, q):
+    """One embeddings file in the faculty_embeddings.json contract (see module docstring)."""
+    return {
         "model": MODEL_ID,
         "model_file": MODEL_FILE,
         "pooling": "mean",
@@ -124,17 +118,48 @@ def main(argv=None, encoder=None):
         "dim": DIM,
         "dtype": "int8",
         "scale": SCALE,
-        "count": len(records),
+        "count": len(ids),
         "generated_at": now_iso(),
         "content_hash": hashlib.sha1("\n".join(texts).encode()).hexdigest(),
-        "ids": [r["id"] for r in records],
-        "data": base64.b64encode(q.tobytes(order="C")).decode("ascii"),
-    }, compact=True)
+        "ids": list(ids),
+        "data": base64.b64encode(np.ascontiguousarray(q).tobytes(order="C")).decode("ascii"),
+    }
+
+
+def main(argv=None, encoder=None):
+    p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    p.add_argument("--data-dir", default=DATA_DIR)
+    p.add_argument("--batch-size", type=int, default=64)
+    args = p.parse_args(argv)
+
+    records, universities = load_records(args.data_dir)
+    encoder = encoder or MiniLMEncoder()
+    texts, vectors = build(records, encoder, args.batch_size)
+    q = quantize(vectors)
+    ids = [r["id"] for r in records]
+
+    # One embeddings shard per university, rows in the same order as its faculty shard.
+    row_of = {fid: i for i, fid in enumerate(ids)}
+    for uni in universities:
+        if not uni.get("embeddings_file"):
+            continue
+        shard_ids = [r["id"] for r in read_json(os.path.join(args.data_dir, uni["faculty_file"]), [])]
+        rows = [row_of[fid] for fid in shard_ids]
+        write_json(os.path.join(args.data_dir, uni["embeddings_file"]),
+                   payload(shard_ids, [texts[i] for i in rows], q[rows]), compact=True)
+
+    # The single-file version exists exactly when faculty_index.json does.
+    combined = os.path.join(args.data_dir, "faculty_embeddings.json")
+    if os.path.exists(os.path.join(args.data_dir, "faculty_index.json")):
+        write_json(combined, payload(ids, texts, q), compact=True)
+    elif os.path.exists(combined):
+        os.remove(combined)
+
     meta_path = os.path.join(args.data_dir, "metadata.json")
     meta = read_json(meta_path, {})
     meta["embeddings"] = {"model": MODEL_ID, "dim": DIM, "dtype": "int8", "count": len(records)}
     write_json(meta_path, meta)
-    print(f"Embedded {len(records)} faculty -> faculty_embeddings.json ({q.nbytes / 1e6:.1f} MB of vectors)", file=sys.stderr)
+    print(f"Embedded {len(records)} faculty ({q.nbytes / 1e6:.1f} MB of vectors)", file=sys.stderr)
 
 
 if __name__ == "__main__":

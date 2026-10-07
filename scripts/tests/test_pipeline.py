@@ -17,6 +17,7 @@ import build_search_index  # noqa: E402
 import cdc_update  # noqa: E402
 import contacts  # noqa: E402
 import initial_ingestion  # noqa: E402
+import faculty  # noqa: E402
 from faculty import compute_domains, merge_publications  # noqa: E402
 from openalex import OpenAlexClient  # noqa: E402
 
@@ -279,6 +280,37 @@ class PipelineTests(unittest.TestCase):
     def test_cdc_refuses_sample_data(self):
         with self.assertRaises(SystemExit):
             cdc_update.main(["--data-dir", self.tmp], client=FakeOpenAlex([], []))
+
+    def read(self, name):
+        return json.loads(pathlib.Path(self.tmp, name).read_text())
+
+    def test_shards(self):
+        records, _ = self.ingest()
+        build_search_index.main(["--data-dir", self.tmp], encoder=FakeEncoder())
+        uni = self.read("universities.json")[0]
+        self.assertEqual((uni["faculty_file"], uni["embeddings_file"], uni["faculty_count"]),
+                         ("faculty/I63966007.json", "embeddings/I63966007.json", 3))
+        shard = self.read(uni["faculty_file"])
+        self.assertEqual([r["id"] for r in shard], [r["id"] for r in records])
+        self.assertEqual(self.read(uni["embeddings_file"])["ids"], [r["id"] for r in shard])
+        row = self.read("faculty_search.json")[0]
+        self.assertEqual(set(row), {"id", "name", "title", "institution_id", "primary_domain", "domains",
+                                    "citation_count", "email", "profile_url", "has_email"})
+        # Shard embeddings equal the matching rows of the combined file.
+        combined = self.read("faculty_embeddings.json")
+        self.assertEqual(self.read(uni["embeddings_file"])["data"], combined["data"])
+
+        # Above the combined limit the single-file index and embeddings go away; shards stay.
+        unis = self.read("universities.json")
+        faculty.write_records(shard, unis, self.tmp, combined_limit=2)
+        build_search_index.main(["--data-dir", self.tmp], encoder=FakeEncoder())
+        self.assertFalse(os.path.exists(os.path.join(self.tmp, "faculty_index.json")))
+        self.assertFalse(os.path.exists(os.path.join(self.tmp, "faculty_embeddings.json")))
+        self.assertEqual(len(self.read(uni["embeddings_file"])["ids"]), 3)
+        # CDC reads and rewrites the shards.
+        stats = cdc_update.main(["--data-dir", self.tmp], client=FakeOpenAlex(self.authors, self.works))
+        self.assertEqual(stats["faculty_refreshed"], 3)
+        self.assertEqual(len(self.read(uni["faculty_file"])), 3)
 
 
 if __name__ == "__main__":
