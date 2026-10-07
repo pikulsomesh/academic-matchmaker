@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Index } from 'flexsearch'
 import { loadCatalog } from '../data/facultyStore.js'
+import { piScoreOf } from '../lib/roles.js'
 
 export const EMPTY_FILTERS = { country: '', institution: '', domains: [] }
 
 export const SORTS = {
+  pi: 'Likely PIs first',
   relevance: 'Best match',
   citations: 'Most cited',
   rank: 'University rank',
@@ -78,8 +80,18 @@ export default function useFacultySearch() {
 
   const [query, setQuery] = useState('')
   const [filters, setFilters] = useState(EMPTY_FILTERS)
-  const [sort, setSort] = useState('relevance')
+  // "Likely PIs first" by default; AI matches switch to "Best match" until the
+  // visitor picks a sort themselves.
+  const [sort, setSortState] = useState('pi')
+  const [sortChosen, setSortChosen] = useState(false)
+  const setSort = (value) => {
+    setSortChosen(true)
+    setSortState(value)
+  }
   const [matchScores, setMatchScores] = useState(null)
+  useEffect(() => {
+    if (!sortChosen) setSortState(matchScores ? 'relevance' : 'pi')
+  }, [matchScores, sortChosen])
 
   useEffect(() => {
     let cancelled = false
@@ -169,6 +181,17 @@ export default function useFacultySearch() {
       relevance: (a, b) => {
         if (matchScores) return (matchScores[b.id] ?? 0) - (matchScores[a.id] ?? 0)
         if (hits) return hits.get(position.get(a)) - hits.get(position.get(b))
+        return byCitations(a, b)
+      },
+      // Unscored people (older data) sort after scored ones, by citations.
+      pi: (a, b) => {
+        const pa = piScoreOf(a)
+        const pb = piScoreOf(b)
+        if (pa != null || pb != null) {
+          if (pa == null) return 1
+          if (pb == null) return -1
+          if (pb !== pa) return pb - pa
+        }
         return byCitations(a, b)
       },
       citations: byCitations,

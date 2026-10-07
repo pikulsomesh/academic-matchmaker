@@ -13,7 +13,7 @@ export default function Navbar({ onAboutClick, facultyCount }) {
               Global Academic Matchmaker
             </span>
             <span className="hidden text-xs text-mit-gray sm:block">
-              {facultyCount ? `${facultyCount.toLocaleString()} faculty · ` : ''}Top 100 global universities
+              {facultyCount ? `${facultyCount.toLocaleString()} researchers · ` : ''}Top 100 global universities
             </span>
           </span>
         </a>

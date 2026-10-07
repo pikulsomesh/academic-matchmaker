@@ -45,6 +45,7 @@ function rowFromSearch(row, uniById) {
   const domains = row.domains?.length ? [...row.domains] : []
   if (row.primary_domain && !domains.includes(row.primary_domain)) domains.unshift(row.primary_domain)
   return {
+    ...row, // keeps optional fields such as the role signals (lib/roles.js)
     id: row.id,
     name: row.name,
     title: row.title,

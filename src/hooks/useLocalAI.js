@@ -228,11 +228,11 @@ export default function useLocalAI(faculty = NO_FACULTY, { institutionIds = null
       return
     }
     let cancelled = false
-    run('Matching faculty…', async () => {
+    run('Matching researchers…', async () => {
       if (indexRef.current?.key !== scopeKey) {
         const shards = await loadFacultyIndex(faculty, institutionIds, {
-          onShards: ({ done, total }) => setBusy(`Loading faculty vectors ${done}/${total}…`),
-          onEmbed: ({ done, total }) => setBusy(`Indexing faculty ${done}/${total}…`),
+          onShards: ({ done, total }) => setBusy(`Loading researcher vectors ${done}/${total}…`),
+          onEmbed: ({ done, total }) => setBusy(`Indexing researchers ${done}/${total}…`),
         })
         indexRef.current = { key: scopeKey, shards }
       }

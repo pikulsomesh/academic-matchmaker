@@ -36,10 +36,10 @@ export default function App() {
       <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-8 sm:px-6 lg:py-10">
         <div className="mb-8 max-w-3xl">
           <h1 className="text-3xl font-semibold tracking-tight text-charcoal sm:text-4xl">
-            Find faculty who share your research interests.
+            Find researchers who share your interests.
           </h1>
           <p className="mt-3 text-lg leading-relaxed text-gray-600">
-            Browse professors across the world’s top 100 universities, or let a private, in-browser model match you
+            Browse faculty, postdocs and research staff across the world’s top 100 universities, or let a private, in-browser model match you
             from your resume.
           </p>
         </div>
@@ -52,10 +52,10 @@ export default function App() {
             className={`md:sticky md:top-24 md:block md:w-72 md:shrink-0 md:self-start ${filtersOpen ? 'block' : 'hidden'}`}
           />
 
-          <section className="min-w-0 flex-1 space-y-5" aria-label="Faculty results">
+          <section className="min-w-0 flex-1 space-y-5" aria-label="Researcher results">
             <div className="flex flex-col gap-3 sm:flex-row">
               <label className="relative flex-1">
-                <span className="sr-only">Search faculty</span>
+                <span className="sr-only">Search researchers</span>
                 <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-mit-gray" />
                 <input
                   type="search"
@@ -99,14 +99,14 @@ export default function App() {
               <div className="flex items-center justify-between gap-3 rounded-xl border border-cardinal/20 bg-cardinal/5 px-4 py-3 text-sm">
                 <span className="flex items-center gap-2 text-charcoal">
                   <Sparkles className="h-4 w-4 text-cardinal" />
-                  Showing faculty matched to your profile.
+                  Showing researchers matched to your profile.
                 </span>
                 <button
                   type="button"
                   onClick={matcher.clearMatches}
                   className="flex items-center gap-1 font-medium text-cardinal hover:underline"
                 >
-                  <X className="h-4 w-4" /> Show all faculty
+                  <X className="h-4 w-4" /> Show all researchers
                 </button>
               </div>
             ) : (
@@ -123,7 +123,7 @@ export default function App() {
 
             {!loading && !error && (
               <p className="text-sm text-mit-gray">
-                {results.length.toLocaleString()} {results.length === 1 ? 'faculty member' : 'faculty members'}
+                {results.length.toLocaleString()} {results.length === 1 ? 'researcher' : 'researchers'}
               </p>
             )}
 
@@ -137,7 +137,7 @@ export default function App() {
               <p className="rounded-xl border border-cardinal/20 bg-cardinal/5 p-4 text-sm text-cardinal">{error}</p>
             ) : results.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-gray-200 px-6 py-16 text-center">
-                <p className="font-medium text-charcoal">No faculty match these criteria.</p>
+                <p className="font-medium text-charcoal">No researchers match these criteria.</p>
                 <p className="mt-1 text-sm text-mit-gray">Try a broader search or clear some filters.</p>
                 {(activeFilterCount > 0 || query) && (
                   <button
