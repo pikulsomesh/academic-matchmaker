@@ -1,12 +1,13 @@
 import { CodeXml, Globe, TriangleAlert, UserRound } from 'lucide-react'
 import Modal from './Modal.jsx'
 
-// Fill these in to turn the placeholders into links.
 const LINKS = [
-  { label: 'Website', icon: Globe, href: null, placeholder: '[Insert Website Link]' },
-  { label: 'LinkedIn', icon: UserRound, href: null, placeholder: '[Insert LinkedIn Link]' },
-  { label: 'GitHub', icon: CodeXml, href: null, placeholder: '[Insert GitHub Link]' },
+  { label: 'Website', icon: Globe, href: 'https://someshmohapatra.in/' },
+  { label: 'LinkedIn', icon: UserRound, href: 'https://www.linkedin.com/in/pikulsomesh/' },
+  { label: 'GitHub', icon: CodeXml, href: 'https://github.com/pikulsomesh/' },
 ]
+
+const displayUrl = (href) => href.replace(/^https:\/\/(www\.)?/, '').replace(/\/$/, '')
 
 export default function AboutModal({ open, onClose }) {
   return (
@@ -43,17 +44,13 @@ export default function AboutModal({ open, onClose }) {
             Analytics at Caterpillar Inc., BTech from IIT Roorkee; holds CMA, CFA, and CSCP credentials).
           </p>
           <ul className="mt-4 space-y-2 text-sm">
-            {LINKS.map(({ label, icon: Icon, href, placeholder }) => (
+            {LINKS.map(({ label, icon: Icon, href }) => (
               <li key={label} className="flex items-center gap-2">
                 <Icon className="h-4 w-4 text-mit-gray" />
                 <span className="font-medium text-charcoal">{label}:</span>
-                {href ? (
-                  <a href={href} target="_blank" rel="noreferrer" className="text-cardinal hover:underline">
-                    {href}
-                  </a>
-                ) : (
-                  <span className="text-mit-gray">{placeholder}</span>
-                )}
+                <a href={href} target="_blank" rel="noreferrer" className="text-cardinal hover:underline">
+                  {displayUrl(href)}
+                </a>
               </li>
             ))}
           </ul>
