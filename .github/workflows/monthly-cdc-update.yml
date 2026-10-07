@@ -117,7 +117,7 @@ jobs:
             --per-institution "${{ needs.plan.outputs.per_institution }}" \
             --min-works "${{ needs.plan.outputs.min_works }}" --min-citations "${{ needs.plan.outputs.min_citations }}" \
             --min-h-index "${{ needs.plan.outputs.min_h_index }}" --window-years "${{ needs.plan.outputs.window_years }}" \
-            --openalex-per-second 2 --web-per-second 3 --workers 8 \
+            --openalex-per-second 0.5 --web-per-second 3 --workers 8 \
             --time-budget-minutes 270
           code=$?
           if [ "$code" = 75 ]; then
