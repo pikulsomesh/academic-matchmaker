@@ -11,6 +11,7 @@ import { Bot, FileText, LoaderCircle, Send, Sparkles, Trash2, Upload, X } from '
  *        Model status. `progress` (0–1) renders a bar while state is 'loading'.
  * @param {Array<{id: string, name: string, status: 'queued'|'processing'|'done'|'error', error?: string}>} props.documents
  * @param {(files: File[]) => void} props.onFilesAdded  Called with dropped or picked files.
+ * @param {(text: string) => void}  [props.onProfileRefAdded] Called with an ORCID iD or OpenAlex author link; omit to hide the field.
  * @param {(id: string) => void}    props.onRemoveDocument
  * @param {(doc) => boolean}        props.canRemoveDocument  Hide the remove button for some documents.
  * @param {Array<{id: string, role: 'user'|'assistant', content: string}>} props.messages
@@ -29,6 +30,7 @@ export default function MatcherInterface({
   status = { state: 'idle' },
   documents = [],
   onFilesAdded = () => {},
+  onProfileRefAdded,
   onRemoveDocument = () => {},
   canRemoveDocument = () => true,
   messages = [],
@@ -44,6 +46,7 @@ export default function MatcherInterface({
 }) {
   const [dragging, setDragging] = useState(false)
   const [draft, setDraft] = useState('')
+  const [profileRef, setProfileRef] = useState('')
   const fileInput = useRef(null)
   const chatEnd = useRef(null)
   const activated = useRef(false)
@@ -74,6 +77,14 @@ export default function MatcherInterface({
     if (!text || busy) return
     onSendMessage(text)
     setDraft('')
+  }
+
+  const addProfile = (e) => {
+    e.preventDefault()
+    const text = profileRef.trim()
+    if (!text || busy) return
+    onProfileRefAdded(text)
+    setProfileRef('')
   }
 
   const hasInput = documents.length > 0 || messages.length > 0 || interests.length > 0 || Boolean(focus)
@@ -139,6 +150,27 @@ export default function MatcherInterface({
               }}
             />
           </div>
+
+          {onProfileRefAdded && (
+            <form onSubmit={addProfile} className="flex gap-2">
+              <input
+                type="text"
+                value={profileRef}
+                onChange={(e) => setProfileRef(e.target.value)}
+                disabled={busy}
+                placeholder="No resume? Paste your ORCID iD or OpenAlex link"
+                aria-label="ORCID iD or OpenAlex author link"
+                className="min-w-0 flex-1 rounded-xl border border-gray-200 px-3 py-2 text-sm text-charcoal placeholder:text-mit-gray focus:border-cardinal/50 focus:outline-none focus:ring-2 focus:ring-cardinal/20"
+              />
+              <button
+                type="submit"
+                disabled={busy || !profileRef.trim()}
+                className="shrink-0 rounded-xl border border-gray-200 px-3 py-2 text-sm font-medium text-charcoal transition hover:border-cardinal/40 hover:text-cardinal disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Use profile
+              </button>
+            </form>
+          )}
 
           {documents.length > 0 && (
             <ul className="space-y-2">

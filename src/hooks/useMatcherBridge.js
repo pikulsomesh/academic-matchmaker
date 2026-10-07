@@ -58,6 +58,13 @@ export default function useMatcherBridge(ai) {
     }
   }
 
+  const addProfileRef = (text) => {
+    if (!live || typeof ai.addOpenAlexProfile !== 'function') return
+    const id = `ref-${Math.random().toString(36).slice(2, 8)}`
+    setPending((p) => [...p, { id, name: `Profile ${text.trim().slice(0, 40)}`, status: 'processing' }])
+    Promise.resolve(ai.addOpenAlexProfile(text)).then(() => setPending((p) => p.filter((d) => d.id !== id)))
+  }
+
   const sendMessage = (text) => {
     if (live) return ai.sendMessage(text)
     setPreviewMessages((m) => [
@@ -82,6 +89,7 @@ export default function useMatcherBridge(ai) {
       status,
       documents,
       onFilesAdded: processFiles,
+      onProfileRefAdded: live && typeof ai.addOpenAlexProfile === 'function' ? addProfileRef : undefined,
       // Only files that failed or are still local can be dismissed; parsed ones live in the profile.
       onRemoveDocument: (id) => setPending((p) => p.filter((d) => d.id !== id)),
       canRemoveDocument: (d) => !d.id.startsWith('src-'),
