@@ -1,5 +1,6 @@
 """Offline tests for the data pipeline. Run: python -m unittest discover scripts/tests"""
 
+import base64
 import json
 import os
 import pathlib
@@ -147,6 +148,17 @@ class EmailTests(unittest.TestCase):
                          "Associate Professor of Materials Science and Engineering")
 
 
+class EmbeddingTextTests(unittest.TestCase):
+    def test_matches_browser_recipe(self):
+        record = {"title": "Associate Professor of Chemistry", "primary_domain": "Materials Science",
+                  "domain_weights": {"Materials Chemistry": 0.3, "Artificial Intelligence": 0.6},
+                  "recent_publications": [{"title": "A"}, {"title": ""}, {"title": "B"}]}
+        self.assertEqual(build_search_index.faculty_text(record),
+                         "Associate Professor of Chemistry. Research areas: Materials Science, "
+                         "Artificial Intelligence, Materials Chemistry. Recent work: A; B.")
+        self.assertEqual(build_search_index.faculty_text({}), "")
+
+
 class DomainTests(unittest.TestCase):
     def test_weights_and_primary(self):
         primary, weights = compute_domains(TOPICS_A)
@@ -245,7 +257,8 @@ class PipelineTests(unittest.TestCase):
         self.ingest()
         build_search_index.main(["--data-dir", self.tmp], encoder=FakeEncoder())
         meta = json.loads(pathlib.Path(self.tmp, "faculty_embeddings.json").read_text())
-        raw = np.fromfile(os.path.join(self.tmp, "faculty_embeddings.bin"), dtype=np.int8)
+        raw = np.frombuffer(base64.b64decode(meta["data"]), dtype=np.int8)
+        self.assertEqual((meta["model"], meta["dim"], meta["dtype"]), ("Xenova/all-MiniLM-L6-v2", 384, "int8"))
         self.assertEqual(raw.size, meta["count"] * meta["dim"])
         vecs = raw.reshape(meta["count"], meta["dim"]).astype(np.float32) / meta["scale"]
         np.testing.assert_allclose(np.linalg.norm(vecs, axis=1), 1.0, atol=0.02)

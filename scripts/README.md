@@ -50,24 +50,22 @@ verified ones. `--require-contact` drops records with neither an email nor an in
 - `universities.json`: `[{id, name, country_code, rank, homepage_url, faculty_count}]`
 - `domains.json`: sorted array of every domain name used in `primary_domain` / `domain_weights`.
 - `metadata.json`: `generated_at`, `last_ingestion`, `last_cdc_run`, counts, last CDC stats.
-- `faculty_embeddings.bin` + `faculty_embeddings.json`: see below.
+- `faculty_embeddings.json`: see below.
 
 ## Embedding format
 
-Model `Xenova/all-MiniLM-L6-v2`, file `onnx/model_quantized.onnx` (what Transformers.js loads by
-default), mean pooling, L2-normalized, 384 dimensions. Stored as int8 (`round(v * 127)`), row-major,
-row `i` belongs to `faculty_embeddings.json` → `ids[i]`.
+`faculty_embeddings.json` follows the contract read by `decodeEmbeddingIndex()` in `src/ai/vectors.js`:
 
-```js
-const meta = await (await fetch(`${base}data/faculty_embeddings.json`)).json();
-const rows = new Int8Array(await (await fetch(`${base}data/${meta.file}`)).arrayBuffer());
-const extractor = await pipeline('feature-extraction', meta.model);
-const q = (await extractor(userText, { pooling: 'mean', normalize: true })).data;
-const score = (i) => { let s = 0; for (let d = 0; d < meta.dim; d++) s += rows[i * meta.dim + d] * q[d]; return s / meta.scale; };
+```json
+{"model": "Xenova/all-MiniLM-L6-v2", "dim": 384, "dtype": "int8", "scale": 127,
+ "ids": ["A5029…", "…"], "data": "<base64: ids.length x 384 int8, row-major>"}
 ```
 
-The embedded text per faculty is `"<title if it names a field>. Research areas: <domains>. Recent work: <titles>."`
-(`faculty_text()` in `build_search_index.py`).
+Vectors come from the `onnx/model.onnx` export (mean pooling, L2-normalized), stored as
+`round(x * 127)`; row `i` belongs to `ids[i]`. The embedded text per faculty is built by
+`faculty_text()` in `build_search_index.py` and must stay identical to `facultyEmbeddingText()`
+in `src/ai/vectors.js`: `{title}. Research areas: {domains by weight, primary_domain first if
+absent}. Recent work: {up to 10 titles joined by "; "}.`
 
 ## Tests
 

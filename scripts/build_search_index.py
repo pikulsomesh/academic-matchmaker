@@ -1,20 +1,20 @@
 #!/usr/bin/env python3
 """Precompute sentence embeddings for every faculty record.
 
-Uses the exact ONNX weights and tokenizer that Transformers.js loads in the browser
-(Xenova/all-MiniLM-L6-v2, onnx/model_quantized.onnx, the library's default), with the
-same post-processing as `pipeline('feature-extraction', ..., {pooling: 'mean', normalize: true})`.
-A query embedded in the browser therefore lives in the same space, and cosine similarity
-is a plain dot product.
+Uses the ONNX export and tokenizer of Xenova/all-MiniLM-L6-v2 that Transformers.js loads in
+the browser, with the same post-processing as
+`pipeline('feature-extraction', ..., {pooling: 'mean', normalize: true})`, so browser query
+vectors and these faculty vectors share one space.
 
-Outputs (in public/data/):
-  faculty_embeddings.bin   int8, row-major, count x dim; row i = faculty_embeddings.json ids[i]
-  faculty_embeddings.json  {model, dim, count, dtype, scale, ids, ...}
-
-Browser-side decode: value = int8 / scale (rows are unit length to within quantization error).
+Output: public/data/faculty_embeddings.json, the contract read by src/ai/vectors.js
+(decodeEmbeddingIndex):
+  {"model": "Xenova/all-MiniLM-L6-v2", "dim": 384, "dtype": "int8", "scale": 127,
+   "ids": [...], "data": "<base64 of ids.length x 384 int8, row-major>", ...}
+int8 value = round(x * 127) of the unit vector; row i belongs to ids[i].
 """
 
 import argparse
+import base64
 import hashlib
 import os
 import sys
@@ -26,30 +26,32 @@ from faculty import DATA_DIR, now_iso, read_json, write_json
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MODEL_ID = "Xenova/all-MiniLM-L6-v2"
-MODEL_FILE = "onnx/model_quantized.onnx"
+MODEL_FILE = "onnx/model.onnx"  # full precision, same weights as sentence-transformers
 HF_BASE = f"https://huggingface.co/{MODEL_ID}/resolve/main"
 MODEL_DIR = os.path.join(ROOT, ".cache", "models", MODEL_ID.replace("/", "__"))
 MAX_TOKENS = 256
 DIM = 384
 SCALE = 127
-MAX_TITLES = 5
+MAX_PUBLICATIONS = 10
 
 
 def faculty_text(record):
-    """Text that represents a faculty member's research for embedding."""
+    """Text embedded per faculty member. Must equal facultyEmbeddingText() in src/ai/vectors.js,
+    which the browser uses when it has to embed faculty itself."""
+    weights = record.get("domain_weights") or {}
+    domains = [name for name, _ in sorted(weights.items(), key=lambda kv: -kv[1])]
+    if record.get("primary_domain") and record["primary_domain"] not in domains:
+        domains.insert(0, record["primary_domain"])
+    titles = [p.get("title") for p in (record.get("recent_publications") or [])[:MAX_PUBLICATIONS]]
+    titles = [t for t in titles if t]
     parts = []
-    title = record.get("title") or ""
-    if " of " in title or " in " in title:
-        parts.append(title + ".")
-    areas = list(record.get("domain_weights", {}).keys())
-    if record.get("primary_domain") and record["primary_domain"] not in areas:
-        areas.insert(0, record["primary_domain"])
-    if areas:
-        parts.append("Research areas: " + ", ".join(areas) + ".")
-    titles = [p["title"].rstrip(".") for p in record.get("recent_publications", [])[:MAX_TITLES] if p.get("title")]
+    if record.get("title"):
+        parts.append(f"{record['title']}.")
+    if domains:
+        parts.append(f"Research areas: {', '.join(domains)}.")
     if titles:
-        parts.append("Recent work: " + "; ".join(titles) + ".")
-    return " ".join(parts) or record.get("name", "")
+        parts.append(f"Recent work: {'; '.join(titles)}.")
+    return " ".join(parts)
 
 
 def download(name):
@@ -114,27 +116,25 @@ def main(argv=None, encoder=None):
     encoder = encoder or MiniLMEncoder()
     texts, vectors = build(records, encoder, args.batch_size)
     q = quantize(vectors)
-    with open(os.path.join(args.data_dir, "faculty_embeddings.bin"), "wb") as fh:
-        fh.write(q.tobytes(order="C"))
     write_json(os.path.join(args.data_dir, "faculty_embeddings.json"), {
         "model": MODEL_ID,
         "model_file": MODEL_FILE,
         "pooling": "mean",
         "normalize": True,
         "dim": DIM,
-        "count": len(records),
         "dtype": "int8",
         "scale": SCALE,
-        "file": "faculty_embeddings.bin",
+        "count": len(records),
         "generated_at": now_iso(),
         "content_hash": hashlib.sha1("\n".join(texts).encode()).hexdigest(),
         "ids": [r["id"] for r in records],
+        "data": base64.b64encode(q.tobytes(order="C")).decode("ascii"),
     }, compact=True)
     meta_path = os.path.join(args.data_dir, "metadata.json")
     meta = read_json(meta_path, {})
     meta["embeddings"] = {"model": MODEL_ID, "dim": DIM, "dtype": "int8", "count": len(records)}
     write_json(meta_path, meta)
-    print(f"Embedded {len(records)} faculty -> faculty_embeddings.bin ({q.nbytes / 1e6:.1f} MB)", file=sys.stderr)
+    print(f"Embedded {len(records)} faculty -> faculty_embeddings.json ({q.nbytes / 1e6:.1f} MB of vectors)", file=sys.stderr)
 
 
 if __name__ == "__main__":
