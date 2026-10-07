@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { cachedRecords, loadEmbeddings } from '../data/facultyStore.js'
+import { cachedRecords, defaultMatchScope, hasEmbeddingShards, hasVectorIndex, loadEmbeddings, searchVectors } from '../data/facultyStore.js'
 import { documentKind, extractDocumentText } from '../ai/documentText.js'
 import {
   EMPTY_PROFILE,
@@ -22,6 +22,9 @@ import { facultyEmbeddingText, profileEmbeddingText, rankIndexes } from '../ai/v
 //   institutionIds    universities whose embedding shards to rank against, null = all
 //   ai.profile        { interests: string[], summary: string }
 //   ai.matches        [{ faculty, score }] best first, [] until a profile exists
+//   ai.missingInstitutionIds  universities of matches whose rows aren't in `faculty` yet
+//   ai.matchScope     { universities, totalUniversities } when matching without a
+//                     filter covers only the top universities (large builds), else null
 //   ai.messages       chat transcript [{ role: 'user' | 'assistant', content }]
 //   ai.sources        processed uploads [{ name, kind, interests }]
 //   ai.busy           what is running now ('Reading resume.pdf…') or null
@@ -103,6 +106,7 @@ export default function useLocalAI(faculty = NO_FACULTY, { institutionIds = null
   const [error, setError] = useState(null)
   const [progress, setProgress] = useState({ chat: null, embedding: null })
   const [device, setDevice] = useState({ chat: null, embedding: null })
+  const [matchScope, setMatchScope] = useState(null)
 
   const indexRef = useRef(null)
   const profileRef = useRef(profile)
@@ -228,16 +232,39 @@ export default function useLocalAI(faculty = NO_FACULTY, { institutionIds = null
       return
     }
     let cancelled = false
-    run('Matching faculty…', async () => {
+    // How to rank against the current scope: the picked universities' own
+    // embedding files when they exist, else clustered vectors (vectors/) when
+    // published, else per-university shards as far as they go.
+    const buildRanker = async () => {
+      const useShards = institutionIds?.length && (await hasEmbeddingShards(institutionIds))
+      if (!useShards && (await hasVectorIndex())) {
+        if (!cancelled) setMatchScope(null)
+        const wanted = institutionIds ? new Set(institutionIds) : null
+        const allowed = wanted ? new Set(faculty.filter((f) => wanted.has(f.institution?.id)).map((f) => f.id)) : null
+        return (query) =>
+          searchVectors(query, {
+            allowed,
+            limit: MAX_MATCHES,
+            onProgress: ({ done, total }) => setBusy(`Loading researcher vectors ${done}/${total}…`),
+          })
+      }
+      // Without a filter, large builds match against the top universities only.
+      const scope = institutionIds ? null : await defaultMatchScope()
+      const ids = scope ? scope.institutionIds : institutionIds
+      if (!cancelled) setMatchScope(scope?.institutionIds ? scope : null)
+      const shards = await loadFacultyIndex(faculty, ids, {
+        onShards: ({ done, total }) => setBusy(`Loading researcher vectors ${done}/${total}…`),
+        onEmbed: ({ done, total }) => setBusy(`Indexing researchers ${done}/${total}…`),
+      })
+      return async (query) => rankIndexes(query, shards, MAX_MATCHES)
+    }
+    run('Matching researchers…', async () => {
       if (indexRef.current?.key !== scopeKey) {
-        const shards = await loadFacultyIndex(faculty, institutionIds, {
-          onShards: ({ done, total }) => setBusy(`Loading faculty vectors ${done}/${total}…`),
-          onEmbed: ({ done, total }) => setBusy(`Indexing faculty ${done}/${total}…`),
-        })
-        indexRef.current = { key: scopeKey, shards }
+        indexRef.current = { key: scopeKey, rank: await buildRanker() }
       }
       const query = await embedTexts([queryText])
-      if (!cancelled) setRanked(rankIndexes(query, indexRef.current.shards, MAX_MATCHES))
+      const ranked = await indexRef.current.rank(query)
+      if (!cancelled) setRanked(ranked)
     })
     return () => {
       cancelled = true
@@ -245,14 +272,24 @@ export default function useLocalAI(faculty = NO_FACULTY, { institutionIds = null
     // institutionIds is read through scopeKey so a new array with the same ids doesn't re-rank.
   }, [queryText, faculty, scopeKey, run])
 
-  const matches = useMemo(() => {
-    const byId = new Map(faculty.map((f) => [f.id, f]))
-    return ranked.filter((r) => byId.has(r.id)).map((r) => ({ faculty: byId.get(r.id), score: r.score }))
-  }, [ranked, faculty])
+  const byId = useMemo(() => new Map(faculty.map((f) => [f.id, f])), [faculty])
+  const matches = useMemo(
+    () => ranked.filter((r) => byId.has(r.id)).map((r) => ({ faculty: byId.get(r.id), score: r.score })),
+    [ranked, byId],
+  )
+  // On large builds the catalog holds only the most important people, so the
+  // site loads these universities' rows to show every match.
+  const missingInstitutionIds = useMemo(() => {
+    const ids = new Set()
+    for (const r of ranked) if (r.institutionId && !byId.has(r.id)) ids.add(r.institutionId)
+    return [...ids]
+  }, [ranked, byId])
 
   return {
     profile,
     matches,
+    missingInstitutionIds,
+    matchScope,
     messages,
     sources,
     busy,

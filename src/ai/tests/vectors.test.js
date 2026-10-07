@@ -93,3 +93,12 @@ test('int8 shards rank like decoded float indexes, across several shards', async
   viaFloat.forEach((r, i) => assert.ok(Math.abs(r.score - viaShard[i].score) < 1e-5))
   assert.equal(rankIndexes(unit(0), shards, 2).length, 2)
 })
+
+test('rankIndexes filters to allowed ids and reports each row’s university', async () => {
+  const { decodeEmbeddingShard, rankIndexes } = await import('../vectors.js')
+  const json = indexJson([unit(0), unit(1), unit(2)], 'int8')
+  json.institution_ids = ['I1', 'I2', 'I1']
+  const cluster = decodeEmbeddingShard(json)
+  const ranked = rankIndexes(unit(2), [cluster], Infinity, new Set(['F0', 'F2']))
+  assert.deepEqual(ranked.map((r) => [r.id, r.institutionId]), [['F2', 'I1'], ['F0', 'I1']])
+})

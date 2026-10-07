@@ -1,5 +1,6 @@
 import { BookOpen, ExternalLink, Mail, MapPin, Quote } from 'lucide-react'
 import { countryName, formatCount } from '../lib/format.js'
+import { LikelyPIBadge, RoleLine } from './RoleSignals.jsx'
 
 // `onShowEmail` opens the full record when the catalog row only says an email exists.
 export function ContactLinks({ faculty, size = 'sm', onShowEmail }) {
@@ -82,11 +83,14 @@ export default function FacultyCard({ faculty, onSelect, matchScore }) {
           </h3>
           {faculty.title && <p className="mt-0.5 line-clamp-2 text-sm text-gray-600">{faculty.title}</p>}
         </div>
-        {matchScore != null && (
-          <span className="shrink-0 rounded-full bg-cardinal/10 px-2.5 py-1 text-xs font-semibold text-cardinal">
-            {Math.round(matchScore * 100)}% match
-          </span>
-        )}
+        <div className="flex shrink-0 flex-col items-end gap-1.5">
+          {matchScore != null && (
+            <span className="rounded-full bg-cardinal/10 px-2.5 py-1 text-xs font-semibold text-cardinal">
+              {Math.round(matchScore * 100)}% match
+            </span>
+          )}
+          <LikelyPIBadge faculty={faculty} />
+        </div>
       </div>
 
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-mit-gray">
@@ -102,6 +106,8 @@ export default function FacultyCard({ faculty, onSelect, matchScore }) {
           <Quote className="h-3.5 w-3.5" /> {formatCount(faculty.citation_count)} citations
         </span>
       </div>
+
+      <RoleLine faculty={faculty} />
 
       {domains.length > 0 && (
         <div className="flex flex-wrap gap-1.5">

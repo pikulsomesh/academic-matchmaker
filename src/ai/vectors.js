@@ -130,22 +130,25 @@ export function decodeEmbeddingShard(json) {
     for (let i = r * dim, end = i + dim; i < end; i++) sum += int8[i] * int8[i]
     invNorm[r] = sum ? 1 / Math.sqrt(sum) : 0
   }
-  return { ids, dim, int8, invNorm }
+  // Vector clusters (vectors/<n>.json) may list each person's university.
+  return { ids, dim, int8, invNorm, institutionIds: json.institution_ids }
 }
 
 // rankByCosine across several decoded indexes (float matrices from
-// decodeEmbeddingIndex or int8 shards from decodeEmbeddingShard).
-export function rankIndexes(query, indexes, limit = Infinity) {
+// decodeEmbeddingIndex or int8 shards from decodeEmbeddingShard). `allowed`
+// (a Set of ids) skips everyone else.
+export function rankIndexes(query, indexes, limit = Infinity, allowed = null) {
   const q = normalize(query)
   const scored = []
   for (const index of indexes) {
     const { ids, dim } = index
     const values = index.matrix ?? index.int8
     for (let r = 0; r < ids.length; r++) {
+      if (allowed && !allowed.has(ids[r])) continue
       let dot = 0
       const offset = r * dim
       for (let i = 0; i < dim; i++) dot += q[i] * values[offset + i]
-      scored.push({ id: ids[r], score: index.matrix ? dot : dot * index.invNorm[r] })
+      scored.push({ id: ids[r], score: index.matrix ? dot : dot * index.invNorm[r], institutionId: index.institutionIds?.[r] ?? index.institutionId })
     }
   }
   scored.sort((a, b) => b.score - a.score)
