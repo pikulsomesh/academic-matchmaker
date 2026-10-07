@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { decodeEmbeddingShard } from '../ai/vectors.js'
+import { decodeEmbeddingShard, rankIndexes } from '../ai/vectors.js'
 
 // Loads the published data in public/data/ (layout: scripts/README.md).
 //
@@ -84,6 +84,9 @@ const recordFileRequests = new Map() // record_file path -> Promise<void>
 let catalogPromise = null
 let uniById = new Map()
 let catalogPartial = false
+let vectorsInfo = null // metadata.vectors: { k, dim, model, count } when vectors/ is published
+let centroidsRequest = null
+const clusterRequests = new Map() // cluster number -> Promise<decoded shard>
 
 export function loadCatalog() {
   catalogPromise ??= (async () => {
@@ -94,6 +97,7 @@ export function loadCatalog() {
     ])
     uniById = new Map(universities.map((u) => [u.id, u]))
     const uniByName = new Map(universities.map((u) => [u.name, u]))
+    vectorsInfo = metadata?.vectors?.k ? metadata.vectors : null
 
     const search = await tryJson('faculty_search.json', null)
     if (Array.isArray(search)) {
@@ -245,6 +249,80 @@ export async function loadEmbeddings(institutionIds, onProgress) {
   }
   await Promise.all(Array.from({ length: Math.min(6, unis.length) }, worker))
   return shards
+}
+
+/** True when every given university has its own embeddings file (exact and smaller than clusters). */
+export async function hasEmbeddingShards(institutionIds) {
+  await loadCatalog()
+  return institutionIds.every((id) => uniById.get(id)?.embeddings_file)
+}
+
+/** True when the build publishes clustered vectors (vectors/), searched with searchVectors(). */
+export async function hasVectorIndex() {
+  await loadCatalog()
+  return Boolean(vectorsInfo)
+}
+
+// Clustered vectors (an inverted-file index): vectors/centroids.json holds one
+// int8 centroid per cluster and vectors/<n>.json the people nearest to it.
+// A search ranks the centroids, then only the closest clusters' people.
+function loadCentroids() {
+  centroidsRequest ??= fetchJson('vectors/centroids.json').then((json) =>
+    decodeEmbeddingShard({ ...json, ids: Array.from({ length: json.k }, (_, i) => i) }),
+  )
+  centroidsRequest.catch(() => {
+    centroidsRequest = null
+  })
+  return centroidsRequest
+}
+
+function loadCluster(n) {
+  if (!clusterRequests.has(n)) {
+    const request = fetchJson(`vectors/${n}.json`).then(decodeEmbeddingShard)
+    request.catch(() => clusterRequests.delete(n))
+    clusterRequests.set(n, request)
+  }
+  return clusterRequests.get(n)
+}
+
+const PROBE_START = 24 // clusters searched first
+const PROBE_MAX = 192 // widest search when a filter leaves few people per cluster
+const ENOUGH_FILTERED = 200 // a filtered search stops widening once it has this many
+
+/**
+ * The `limit` people closest to `query` from vectors/, limited to `allowed`
+ * ids when given. Starts with the closest PROBE_START clusters and widens
+ * while fewer than `limit` (with a filter, ENOUGH_FILTERED) people are found.
+ * -> [{ id, score, institutionId? }] best first
+ */
+export async function searchVectors(query, { allowed = null, limit = 1000, onProgress } = {}) {
+  const centroids = await loadCentroids()
+  const order = rankIndexes(query, [centroids]).map((c) => c.id)
+  let probe = Math.min(PROBE_START, order.length)
+  let loaded = 0
+  let done = 0
+  const clusters = []
+  for (;;) {
+    const wanted = order.slice(loaded, probe)
+    let next = 0
+    const worker = async () => {
+      while (next < wanted.length) {
+        const n = wanted[next++]
+        try {
+          clusters.push(await loadCluster(n))
+        } catch (err) {
+          console.warn(`Vector cluster ${n} unavailable`, err)
+        }
+        onProgress?.({ done: ++done, total: probe })
+      }
+    }
+    await Promise.all(Array.from({ length: Math.min(6, wanted.length) }, worker))
+    loaded = probe
+    const ranked = rankIndexes(query, clusters, limit, allowed)
+    const enough = allowed ? Math.min(limit, ENOUGH_FILTERED) : limit
+    if (ranked.length >= enough || probe >= Math.min(PROBE_MAX, order.length)) return ranked
+    probe = Math.min(probe * 2, PROBE_MAX, order.length)
+  }
 }
 
 // Vectors the matcher downloads when no university is picked on a large
