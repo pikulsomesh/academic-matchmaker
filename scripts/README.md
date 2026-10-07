@@ -88,7 +88,7 @@ so the site loads one university's rows on demand. `metadata.json` records `sear
 centroids) and `vectors/<cluster>.json` (`{ids, institution_ids (parallel to ids), dim, dtype, scale, data}`). Embed the query, rank the
 centroids, load the nearest clusters, rank those exactly. `metadata.vectors` = `{k, dim, model, count}`.
 `embeddings/<institution id>.json` is written until `src/` mentions `vectors/centroids.json`, then dropped.
-Coverage beyond the first tier also waits until `src/` mentions both `record_file` and `vectors/centroids.json`.
+Coverage beyond the first tier waits until `src/` mentions `record_file` (the site can read chunked full records).
 
 ## Role signals
 

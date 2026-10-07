@@ -254,9 +254,9 @@ class ChunkAndVectorTests(unittest.TestCase):
         self.assertEqual(plan_run.plan(*args, chunks_ready=True)[:2], ("full", 3000))
         d = tempfile.mkdtemp()
         try:
-            pathlib.Path(d, "a.js").write_text("row.record_file")
+            pathlib.Path(d, "a.js").write_text("fetch(row.faculty_file)")
             self.assertFalse(plan_run.site_reads_chunks(d))
-            pathlib.Path(d, "b.js").write_text("fetch('vectors/centroids.json')")
+            pathlib.Path(d, "b.js").write_text("fetch(row.record_file)")
             self.assertTrue(plan_run.site_reads_chunks(d))
         finally:
             shutil.rmtree(d)
