@@ -10,6 +10,8 @@ import {
   quickProfile,
   topicsFromText,
 } from '../ai/profile.js'
+import { EMBEDDING_DIM } from '../ai/config.js'
+import { rankEvidence, sharedInterests } from '../ai/explain.js'
 import { facultyEmbeddingText, profileEmbeddingText, rankIndexes } from '../ai/vectors.js'
 
 // In-browser matching: an upload is turned into a profile without a language
@@ -37,6 +39,7 @@ import { facultyEmbeddingText, profileEmbeddingText, rankIndexes } from '../ai/v
 //   ai.addText(text, name?)   pasted profile or CV text
 //   ai.sendMessage(text)      chat input, merged into the profile
 //   ai.removeInterest(topic) / ai.setInterests(list) / ai.reset()
+//   ai.explain(record)        { areas, papers, shared } closest to the profile, or null (see ai/explain.js)
 //   ai.preload(models?)       start model downloads early (default: the embedding model only)
 
 let workerInstance = null
@@ -269,6 +272,25 @@ export default function useLocalAI(faculty = NO_FACULTY, { institutionIds = null
     // institutionIds is read through scopeKey so a new array with the same ids doesn't re-rank.
   }, [queryText, faculty, scopeKey, run])
 
+  // Why a researcher matches: their research areas and paper titles embedded next to the profile.
+  const explain = useCallback(
+    async (record) => {
+      if (!queryText || !record) return null
+      const weights = Object.entries(record.domain_weights ?? {}).sort((a, b) => b[1] - a[1])
+      const areas = weights.map(([name]) => name).slice(0, 6)
+      if (record.primary_domain && !areas.includes(record.primary_domain)) areas.unshift(record.primary_domain)
+      const papers = (record.recent_publications ?? []).filter((p) => p.title)
+      if (!areas.length && !papers.length) return null
+      const matrix = await embedTexts([queryText, ...areas, ...papers.map((p) => p.title)])
+      const texts = [...areas, ...papers.map((p) => p.title)]
+      return {
+        ...rankEvidence({ dim: EMBEDDING_DIM, matrix, areas, papers }),
+        shared: sharedInterests(profileRef.current.interests, texts),
+      }
+    },
+    [queryText],
+  )
+
   const byId = useMemo(() => new Map(faculty.map((f) => [f.id, f])), [faculty])
   const matches = useMemo(
     () => ranked.filter((r) => byId.has(r.id)).map((r) => ({ faculty: byId.get(r.id), score: r.score })),
@@ -300,5 +322,6 @@ export default function useLocalAI(faculty = NO_FACULTY, { institutionIds = null
     setInterests,
     reset,
     preload,
+    explain,
   }
 }
