@@ -23,6 +23,7 @@ import hashlib
 import json
 import os
 import sys
+import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date, timedelta
 from urllib.parse import urlparse
@@ -347,11 +348,34 @@ def parse_args(argv=None):
     p.add_argument("--skip-scrape", action="store_true", help="skip profile and directory page scraping")
     p.add_argument("--no-cache", action="store_true")
     p.add_argument("--workers", type=int, default=6)
+    p.add_argument("--time-budget-minutes", type=float, default=None,
+                   help="pause (exit 75, cache kept) once this much time has passed")
     return p.parse_args(argv)
+
+
+EXIT_PAUSED = 75  # cache is saved; run again (next day if the OpenAlex budget ran out) to resume
+
+
+class Paused(Exception):
+    pass
 
 
 def main(argv=None, client=None, web=None):
     args = parse_args(argv)
+    try:
+        return build(args, client, web)
+    except Paused as exc:
+        log(f"Paused: {exc}. Progress is cached; run again to resume.")
+        raise SystemExit(EXIT_PAUSED)
+    except requests.HTTPError as exc:
+        if exc.response is not None and exc.response.status_code == 429:
+            log("Paused: OpenAlex daily budget used up. Progress is cached; run again tomorrow to resume.")
+            raise SystemExit(EXIT_PAUSED)
+        raise
+
+
+def build(args, client=None, web=None):
+    deadline = time.monotonic() + args.time_budget_minutes * 60 if args.time_budget_minutes is not None else None
     config = read_json(args.config)
     client = client or OpenAlexClient()
     web = web or Web()
@@ -361,6 +385,8 @@ def main(argv=None, client=None, web=None):
     universities, records = [], []
     config_changed = False
     for uni in unis:
+        if deadline is not None and time.monotonic() >= deadline:
+            raise Paused("time budget reached")
         inst = resolve_institution(client, cache, uni)
         if not uni.get("openalex_id"):
             uni["openalex_id"] = short_id(inst["id"])
@@ -379,6 +405,8 @@ def main(argv=None, client=None, web=None):
         recent_by_author = fetch_recent_works_batched(client, cache, [short_id(a["id"]) for a in authors])
 
         def process(author):
+            if deadline is not None and time.monotonic() >= deadline:
+                raise Paused("time budget reached")
             recent = recent_by_author[short_id(author["id"])]
             found = find_contacts(author, uni, domains, directory_index, web, cache, args)
             return build_record(author, uni, inst, recent, found)
@@ -414,6 +442,7 @@ def main(argv=None, client=None, web=None):
         "last_cdc_run": today_iso(),
         "ranking_source": config.get("source"),
         "faculty_count": len(records),
+        "per_institution": args.per_institution,
         "faculty_with_email": with_email,
         "institution_count": len(universities),
         "openalex_requests": client.request_count,

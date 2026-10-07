@@ -16,6 +16,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import build_search_index  # noqa: E402
 import cdc_update  # noqa: E402
 import contacts  # noqa: E402
+import plan_run  # noqa: E402
 import initial_ingestion  # noqa: E402
 import faculty  # noqa: E402
 from faculty import compute_domains, merge_publications  # noqa: E402
@@ -112,6 +113,52 @@ class FakeEncoder:
             for word in text.lower().split():
                 out[i, hash(word) % build_search_index.DIM] += 1
         return out / np.linalg.norm(out, axis=1, keepdims=True)
+
+
+class PlanTests(unittest.TestCase):
+    COVERAGE = {"target_per_institution": 1000}
+    BUILT = {"last_ingestion": "2026-10-07", "per_institution": 200}
+
+    def plan(self, event="schedule", schedule="0 2 * * *", metadata=None, shards_ready=True, mode="", per=""):
+        return plan_run.plan(event, schedule, mode, per, self.BUILT if metadata is None else metadata,
+                             self.COVERAGE, shards_ready)[:2]
+
+    def test_daily_expands_only_when_safe(self):
+        self.assertEqual(self.plan(), ("full", 1000))
+        self.assertEqual(self.plan(shards_ready=False)[0], "skip", "site still reads the single file")
+        self.assertEqual(self.plan(metadata={})[0], "skip", "no first build yet")
+        self.assertEqual(self.plan(metadata={"last_ingestion": "x", "per_institution": 1000})[0], "skip", "done")
+
+    def test_monthly_and_manual(self):
+        self.assertEqual(self.plan(schedule="0 0 1 * *")[0], "cdc")
+        self.assertEqual(self.plan(event="workflow_dispatch", mode="full", per=""), ("full", 200))
+        self.assertEqual(self.plan(event="workflow_dispatch", mode="full", per="500"), ("full", 500))
+
+    def test_site_check_reads_src(self):
+        d = tempfile.mkdtemp()
+        try:
+            pathlib.Path(d, "a.js").write_text("fetch('faculty_index.json')")
+            self.assertFalse(plan_run.site_reads_shards(d))
+            pathlib.Path(d, "b.jsx").write_text("fetchJson('faculty_search.json')")
+            self.assertTrue(plan_run.site_reads_shards(d))
+        finally:
+            shutil.rmtree(d)
+
+
+class PauseTests(unittest.TestCase):
+    def test_time_budget_pauses_with_exit_75(self):
+        tmp = tempfile.mkdtemp()
+        try:
+            config = os.path.join(tmp, "c.json")
+            pathlib.Path(config).write_text(json.dumps({"universities": [
+                {"rank": 1, "name": "MIT", "country_code": "US", "openalex_id": None}]}))
+            with self.assertRaises(SystemExit) as ctx:
+                initial_ingestion.main(["--config", config, "--out-dir", tmp, "--time-budget-minutes", "0", "--no-cache"],
+                                       client=FakeOpenAlex([], []), web=FakeWeb({}))
+            self.assertEqual(ctx.exception.code, initial_ingestion.EXIT_PAUSED)
+            self.assertFalse(os.path.exists(os.path.join(tmp, "faculty_search.json")), "nothing written when paused")
+        finally:
+            shutil.rmtree(tmp)
 
 
 class EmailTests(unittest.TestCase):

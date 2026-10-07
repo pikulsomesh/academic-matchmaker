@@ -1,0 +1,88 @@
+#!/usr/bin/env python3
+"""Decide what a run of the data workflow should do; prints GitHub Actions outputs.
+
+  manual run       -> whatever mode / per_institution was picked in the form
+  monthly schedule -> cdc
+  daily schedule   -> full at the coverage target, while the published index is smaller
+                      than the target and the website can read per-university files;
+                      otherwise skip (finishes in seconds)
+
+The daily build resumes from the previous day's cache, so a build too big for one day of
+OpenAlex budget or one job's time limit completes over several days without anyone clicking.
+"""
+
+import argparse
+import json
+import os
+import sys
+
+# Standard library only: this runs before the pipeline's dependencies are installed.
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DATA_DIR = os.path.join(ROOT, "public", "data")
+COVERAGE_CONFIG = os.path.join(ROOT, "scripts", "config", "coverage.json")
+SRC_DIR = os.path.join(ROOT, "src")
+MONTHLY_CRON = "0 0 1 * *"
+
+
+def read_json(path):
+    try:
+        with open(path, encoding="utf-8") as fh:
+            return json.load(fh)
+    except (OSError, ValueError):
+        return {}
+
+
+def site_reads_shards(src_dir=SRC_DIR):
+    """True once the website loads faculty_search.json (the per-university layout)."""
+    for folder, _, files in os.walk(src_dir):
+        for name in files:
+            if name.endswith((".js", ".jsx", ".ts", ".tsx")):
+                with open(os.path.join(folder, name), encoding="utf-8") as fh:
+                    if "faculty_search.json" in fh.read():
+                        return True
+    return False
+
+
+def plan(event, schedule, mode_input, per_institution_input, metadata, coverage, shards_ready):
+    """-> (mode, per_institution, reason). mode is 'full', 'cdc' or 'skip'."""
+    target = int(coverage.get("target_per_institution", 200))
+    if event == "workflow_dispatch":
+        mode = mode_input or "cdc"
+        return mode, int(per_institution_input or 200), f"manual {mode} run"
+    if schedule == MONTHLY_CRON:
+        return "cdc", target, "monthly update"
+    if not metadata.get("last_ingestion"):
+        return "skip", target, "waiting for the first full build to be run by hand"
+    built = int(metadata.get("per_institution") or 200)
+    if built >= target:
+        return "skip", target, f"index already built at {built} per institution"
+    if not shards_ready:
+        return "skip", target, "waiting for the website to read per-university files"
+    return "full", target, f"expanding coverage from {built} to {target} per institution"
+
+
+def main(argv=None):
+    p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    p.add_argument("--event", default=os.environ.get("GITHUB_EVENT_NAME", ""))
+    p.add_argument("--schedule", default="")
+    p.add_argument("--mode", default="")
+    p.add_argument("--per-institution", default="")
+    args = p.parse_args(argv)
+    mode, per_institution, reason = plan(
+        args.event, args.schedule, args.mode, args.per_institution,
+        read_json(os.path.join(DATA_DIR, "metadata.json")),
+        read_json(COVERAGE_CONFIG),
+        site_reads_shards(),
+    )
+    print(f"Plan: {mode} ({reason})", file=sys.stderr)
+    out = os.environ.get("GITHUB_OUTPUT")
+    lines = f"mode={mode}\nper_institution={per_institution}\n"
+    if out:
+        with open(out, "a", encoding="utf-8") as fh:
+            fh.write(lines)
+    else:
+        print(lines, end="")
+
+
+if __name__ == "__main__":
+    main()

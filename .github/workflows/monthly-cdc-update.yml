@@ -2,7 +2,8 @@ name: Monthly data update
 
 on:
   schedule:
-    - cron: '0 0 1 * *'
+    - cron: '0 0 1 * *'   # monthly CDC update
+    - cron: '0 2 * * *'   # daily: continue expanding coverage while scripts/config/coverage.json asks for more
   workflow_dispatch:
     inputs:
       mode:
@@ -38,19 +39,29 @@ jobs:
           cache: pip
           cache-dependency-path: scripts/requirements.txt
 
+      # Decides full / cdc / skip; see scripts/plan_run.py. The daily schedule only builds
+      # once the first full build exists and the website reads per-university files.
+      - name: Plan
+        id: plan
+        run: >
+          python scripts/plan_run.py --event "${{ github.event_name }}" --schedule "${{ github.event.schedule }}"
+          --mode "${{ inputs.mode }}" --per-institution "${{ inputs.per_institution }}"
+
       - run: pip install -r scripts/requirements.txt
+        if: steps.plan.outputs.mode != 'skip'
 
       - name: Cache embedding model
+        if: steps.plan.outputs.mode != 'skip'
         uses: actions/cache@v4
         with:
           path: .cache/models
           key: minilm-l6-v2-onnx-fp32
 
-      # A full build can outlast one job (time limit) or one day of OpenAlex budget. Its
-      # responses are cached as it goes and saved even when the step fails, so re-running
-      # the workflow resumes where the last attempt stopped.
+      # A full build can outlast one job (time limit) or one day of OpenAlex budget. It then
+      # pauses with its responses cached; the next run (the daily schedule, or a manual re-run)
+      # restores that cache and resumes where it stopped.
       - name: Restore ingestion cache
-        if: inputs.mode == 'full'
+        if: steps.plan.outputs.mode == 'full'
         uses: actions/cache/restore@v4
         with:
           path: .cache/ingestion
@@ -58,26 +69,38 @@ jobs:
           restore-keys: ingestion-
 
       - name: Full ingestion
-        if: inputs.mode == 'full'
+        id: ingest
+        if: steps.plan.outputs.mode == 'full'
         timeout-minutes: 300
-        run: python scripts/initial_ingestion.py --per-institution "${{ inputs.per_institution || '200' }}"
+        run: |
+          set +e
+          python scripts/initial_ingestion.py --per-institution "${{ steps.plan.outputs.per_institution }}" --time-budget-minutes 270
+          code=$?
+          if [ "$code" = 75 ]; then
+            echo "paused=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::Build paused with progress cached; the next run resumes it."
+            exit 0
+          fi
+          exit $code
 
       - name: Save ingestion cache
-        if: always() && inputs.mode == 'full'
+        if: always() && steps.plan.outputs.mode == 'full'
         uses: actions/cache/save@v4
         with:
           path: .cache/ingestion
           key: ingestion-${{ github.run_id }}-${{ github.run_attempt }}
 
       - name: Monthly CDC update
-        if: inputs.mode != 'full'
+        if: steps.plan.outputs.mode == 'cdc'
         run: python scripts/cdc_update.py
 
       - name: Build search index
+        if: steps.plan.outputs.mode != 'skip' && steps.ingest.outputs.paused != 'true'
         run: python scripts/build_search_index.py
 
       - name: Commit updated data
         id: commit
+        if: steps.plan.outputs.mode != 'skip' && steps.ingest.outputs.paused != 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -86,7 +109,9 @@ jobs:
             echo "changed=false" >> "$GITHUB_OUTPUT"
             echo "No data changes."
           else
-            git commit -m "data: ${{ inputs.mode || 'cdc' }} update $(date -u +%Y-%m-%d)"
+            git commit -m "data: ${{ steps.plan.outputs.mode }} update $(date -u +%Y-%m-%d)"
+            # main may have moved during a long build; data files are only written here.
+            git pull --rebase origin "${{ github.ref_name }}"
             git push
             echo "changed=true" >> "$GITHUB_OUTPUT"
           fi
