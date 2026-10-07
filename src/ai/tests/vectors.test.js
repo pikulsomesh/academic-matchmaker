@@ -1,7 +1,16 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
-import { cosineSimilarity, decodeEmbeddingIndex, facultyEmbeddingText, profileEmbeddingText, rankByCosine } from '../vectors.js'
+import {
+  cosineSimilarity,
+  decodeEmbeddingIndex,
+  decodeEmbeddingShard,
+  facultyEmbeddingText,
+  normalize,
+  profileEmbeddingText,
+  rankByCosine,
+  rankIndexes,
+} from '../vectors.js'
 
 const DIM = 384
 
@@ -101,4 +110,44 @@ test('rankIndexes filters to allowed ids and reports each row’s university', a
   const cluster = decodeEmbeddingShard(json)
   const ranked = rankIndexes(unit(2), [cluster], Infinity, new Set(['F0', 'F2']))
   assert.deepEqual(ranked.map((r) => [r.id, r.institutionId]), [['F2', 'I1'], ['F0', 'I1']])
+})
+
+// Sign bits packed 8 per byte, first dimension in the high bit (pack_bits in build_search_index.py).
+function bitsJson(rows) {
+  const bytes = new Uint8Array(rows.length * (DIM / 8))
+  rows.forEach((r, n) => {
+    for (let i = 0; i < DIM; i++) if (r[i] > 0) bytes[n * (DIM / 8) + (i >> 3)] |= 0x80 >> (i & 7)
+  })
+  return {
+    ids: rows.map((_, i) => `A${i}`),
+    dim: DIM,
+    dtype: 'bits',
+    institutions: ['I1', 'I2'],
+    institution_index: rows.map((_, i) => i % 2),
+    data: Buffer.from(bytes).toString('base64'),
+  }
+}
+
+function randomUnit(seed) {
+  let s = seed
+  const v = new Float32Array(DIM)
+  for (let i = 0; i < DIM; i++) {
+    s = (s * 1103515245 + 12345) % 2147483648
+    v[i] = s / 2147483648 - 0.5
+  }
+  return normalize(v)
+}
+
+test('1-bit vectors rank close to full vectors and keep the 0-1 score scale', () => {
+  const rows = Array.from({ length: 300 }, (_, i) => randomUnit(i + 1))
+  const query = rows[7]
+  const bits = decodeEmbeddingShard(bitsJson(rows))
+  assert.deepEqual(bits.institutionIds.slice(0, 3), ['I1', 'I2', 'I1'])
+  const ranked = rankIndexes(query, [bits], 10)
+  assert.equal(ranked[0].id, 'A7')
+  assert.ok(ranked[0].score > 0.9 && ranked[0].score <= 1, `self score ${ranked[0].score}`)
+  assert.ok(Math.abs(ranked[5].score) < 0.3, 'unrelated vectors score near zero')
+  assert.equal(ranked[0].institutionId, 'I2')
+  const allowed = new Set(['A3', 'A4'])
+  assert.deepEqual(rankIndexes(query, [bits], 10, allowed).map((r) => r.id).sort(), ['A3', 'A4'])
 })

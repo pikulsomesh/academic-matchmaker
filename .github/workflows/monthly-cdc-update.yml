@@ -34,6 +34,11 @@ jobs:
     env:
       OPENALEX_MAILTO: ${{ vars.OPENALEX_MAILTO }}
       OPENALEX_API_KEY: ${{ secrets.OPENALEX_API_KEY }}
+      # Optional Hugging Face hosting: with both set, the data lives in that dataset repo instead of
+      # being committed to public/data (scripts/hf_sync.py), and the size budget grows to
+      # hosted_size_budget_mb. Without them everything works as before.
+      HF_DATASET_REPO: ${{ vars.HF_DATASET_REPO }}
+      HF_TOKEN: ${{ secrets.HF_TOKEN }}
     steps:
       - uses: actions/checkout@v4
 
@@ -42,6 +47,14 @@ jobs:
           python-version: '3.12'
           cache: pip
           cache-dependency-path: scripts/requirements.txt
+
+      # The published data (and its metadata.json, which the plan reads) lives in the dataset.
+      - name: Pull data from Hugging Face
+        id: hf_pull
+        if: env.HF_DATASET_REPO != ''
+        run: |
+          pip install "huggingface_hub>=0.25"
+          python scripts/hf_sync.py pull
 
       # Decides full / cdc / skip; see scripts/plan_run.py.
       - name: Plan
@@ -105,13 +118,21 @@ jobs:
         if: steps.plan.outputs.mode != 'skip' && steps.ingest.outputs.paused != 'true'
         run: python scripts/build_search_index.py
 
+      # Also runs on a skipped plan the first time, to seed an empty dataset with the current data.
+      - name: Publish data to Hugging Face
+        if: >
+          env.HF_DATASET_REPO != '' && ((steps.plan.outputs.mode != 'skip' && steps.ingest.outputs.paused != 'true')
+          || steps.hf_pull.outputs.empty == 'true')
+        run: python scripts/hf_sync.py push --message "${{ steps.plan.outputs.mode }} update $(date -u +%Y-%m-%d)"
+
       - name: Commit updated data
         id: commit
         if: steps.plan.outputs.mode != 'skip' && steps.ingest.outputs.paused != 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add public/data scripts/config
+          # With Hugging Face hosting only config changes are committed; the data is in the dataset.
+          if [ -n "$HF_DATASET_REPO" ]; then git add scripts/config; else git add public/data scripts/config; fi
           if git diff --cached --quiet; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
             echo "No data changes."

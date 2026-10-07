@@ -21,9 +21,9 @@ import re
 import sys
 from datetime import date, timedelta
 
-from faculty import (AUTHOR_SELECT, DATA_DIR, WORK_SELECT, compute_domains, contact_flags, merge_publications,
-                     last_publication_year, load_records, now_iso, publication_entry, read_json, today_iso, write_json,
-                     write_records)
+from faculty import (AUTHOR_SELECT, DATA_DIR, WORK_SELECT, compute_domains, contact_flags, coverage_config,
+                     merge_publications, last_publication_year, load_records, now_iso, publication_entry, read_json,
+                     size_budget_mb, today_iso, write_json, write_records)
 from openalex import MAX_OR_VALUES, OpenAlexClient, chunks, short_id
 
 
@@ -99,9 +99,10 @@ def run(data_dir, client, overlap_days=30, since=None, until=None):
         record["flags"] = contact_flags(record)
         refreshed += 1
 
-    coverage = read_json(os.path.join(os.path.dirname(os.path.abspath(__file__)), "config", "coverage.json"), {})
+    coverage = coverage_config()
+    budget_mb = size_budget_mb(coverage)
     stats = write_records(records, universities, data_dir,
-                          budget_bytes=int(coverage["size_budget_mb"] * 1e6) if coverage.get("size_budget_mb") else None,
+                          budget_bytes=int(budget_mb * 1e6) if budget_mb else None,
                           search_index_rows=coverage.get("search_index_rows"))
     meta.update({
         "generated_at": now_iso(),

@@ -8,6 +8,7 @@ import shutil
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 import numpy as np
 
@@ -191,16 +192,61 @@ class SizeAndIndexTests(unittest.TestCase):
             unis = [{"id": "I1", "name": "U", "country_code": "US", "rank": 1}]
             stats = faculty.write_records(self.records(30), unis, d, search_index_rows=10)
             self.assertFalse(stats["search_index_complete"])
-            top = json.load(open(os.path.join(d, "faculty_search.json")))
+            top = faculty.decode_search_file(json.load(open(os.path.join(d, "faculty_search.json"))))
             self.assertEqual(len(top), 10)
             self.assertEqual(json.load(open(os.path.join(d, "universities.json")))[0]["search_file"], "search/I1.json")
-            self.assertEqual(len(json.load(open(os.path.join(d, "search", "I1.json")))), 30)
+            self.assertEqual(len(faculty.decode_search_file(json.load(open(os.path.join(d, "search", "I1.json"))))), 30)
             stats = faculty.write_records(self.records(30), unis, d, search_index_rows=100)
             self.assertTrue(stats["search_index_complete"])
             self.assertFalse(os.path.exists(os.path.join(d, "search")))
             self.assertNotIn("search_file", json.load(open(os.path.join(d, "universities.json")))[0])
         finally:
             shutil.rmtree(d)
+
+
+class CompactSearchFileTests(unittest.TestCase):
+    ROWS = [
+        {"id": "A1", "name": "Ada", "title": "Professor", "institution_id": "I1", "primary_domain": "Physics",
+         "domains": ["Optics", "Physics"], "citation_count": 900, "email": "ada@u.edu",
+         "profile_url": "https://orcid.org/0000-0001", "has_email": True, "seniority_score": 80,
+         "first_author_recent": 1, "last_author_recent": 3, "recent_works": 4, "last_publication_year": 2026,
+         "record_file": "faculty/I1/0.json"},
+        {"id": "A2", "name": "Bo", "title": None, "institution_id": "I2", "primary_domain": None, "domains": [],
+         "citation_count": 0, "email": None, "profile_url": "https://u.edu/~bo|x", "has_email": False,
+         "seniority_score": None, "first_author_recent": None, "last_author_recent": None, "recent_works": None,
+         "last_publication_year": None, "record_file": None},
+    ]
+
+    def test_round_trip(self):
+        data = faculty.compact_search_file(self.ROWS)
+        self.assertEqual(data["institutions"], ["I1", "I2"])
+        self.assertEqual(data["rows"][0][8], "0|0000-0001")
+        self.assertEqual(len(data["rows"][1]), 9, "trailing nulls dropped")
+        self.assertEqual(faculty.decode_search_file(json.loads(json.dumps(data))), self.ROWS)
+
+    def test_written_file_is_valid_json_and_much_smaller(self):
+        d = tempfile.mkdtemp()
+        try:
+            rows = [dict(self.ROWS[0], id=f"A{i}") for i in range(200)]
+            path = os.path.join(d, "s.json")
+            faculty.write_search_file(rows, path)
+            self.assertEqual(faculty.decode_search_file(json.load(open(path))), rows)
+            plain = sum(len(json.dumps(r)) for r in rows)
+            self.assertLess(os.path.getsize(path), plain / 2)
+        finally:
+            shutil.rmtree(d)
+
+    def test_size_budget_grows_when_hosted(self):
+        cov = {"size_budget_mb": 800, "hosted_size_budget_mb": 8000}
+        with mock.patch.dict(os.environ, {"HF_DATASET_REPO": ""}):
+            self.assertEqual(faculty.size_budget_mb(cov), 800)
+        with mock.patch.dict(os.environ, {"HF_DATASET_REPO": "me/data"}):
+            self.assertEqual(faculty.size_budget_mb(cov), 8000)
+        meta = {"last_ingestion": "x", "per_institution": 3000, "budget_reached": True, "size_budget_mb": 800}
+        cov["tiers"] = [{"per_institution": 3000}, {"per_institution": 10000}]
+        args = ("schedule", "0 2 * * *", "", "", meta, cov, True)
+        self.assertEqual(plan_run.plan(*args)[0], "skip")
+        self.assertEqual(plan_run.plan(*args, hosted=True)[:2], ("full", 10000))
 
 
 class ChunkAndVectorTests(unittest.TestCase):
@@ -213,14 +259,15 @@ class ChunkAndVectorTests(unittest.TestCase):
             uni = json.load(open(os.path.join(d, "universities.json")))[0]
             self.assertEqual(uni["faculty_files"], ["faculty/I1/0.json", "faculty/I1/1.json", "faculty/I1/2.json"])
             self.assertEqual(uni["faculty_file"], "faculty/I1/0.json")
-            rows = json.load(open(os.path.join(d, "faculty_search.json")))
+            rows = faculty.decode_search_file(json.load(open(os.path.join(d, "faculty_search.json"))))
             by_id = {r["id"]: r["record_file"] for r in rows}
             self.assertEqual(by_id["A2499"], "faculty/I1/0.json", "most important first")
             self.assertEqual(by_id["A0"], "faculty/I1/2.json")
             self.assertEqual(len(faculty.load_records(d)[0]), 2500)
             faculty.write_records(recs[:500], unis, d)  # shrinks back to one file; stale chunks are removed
             self.assertEqual(sorted(os.listdir(os.path.join(d, "faculty"))), ["I1.json"])
-            self.assertEqual(json.load(open(os.path.join(d, "faculty_search.json")))[0]["record_file"], "faculty/I1.json")
+            rows = faculty.decode_search_file(json.load(open(os.path.join(d, "faculty_search.json"))))
+            self.assertEqual(rows[0]["record_file"], "faculty/I1.json")
         finally:
             shutil.rmtree(d)
 
@@ -232,19 +279,39 @@ class ChunkAndVectorTests(unittest.TestCase):
             vecs /= np.linalg.norm(vecs, axis=1, keepdims=True)
             q = build_search_index.quantize(vecs)
             ids = [f"A{i}" for i in range(300)]
-            info = build_search_index.build_ivf(ids, q, d, institution_ids=["I" + str(i % 3) for i in range(300)])
-            self.assertEqual((info["k"], info["dim"], info["count"]), (17, 384, 300))
-            cent = json.load(open(os.path.join(d, "vectors", "centroids.json")))
-            self.assertEqual(len(base64.b64decode(cent["data"])), 17 * 384)
-            seen = []
-            for c in range(17):
-                part = json.load(open(os.path.join(d, "vectors", f"{c}.json")))
-                self.assertEqual(len(base64.b64decode(part["data"])), len(part["ids"]) * 384)
-                self.assertEqual(len(part["institution_ids"]), len(part["ids"]))
-                seen += part["ids"]
-            self.assertEqual(sorted(seen), sorted(ids))
+            insts = ["I" + str(i % 3) for i in range(300)]
+            for fmt, size in (("int8", 384), ("bits", 48)):
+                info = build_search_index.build_ivf(ids, q, d, institution_ids=insts, vector_format=fmt)
+                self.assertEqual((info["k"], info["dim"], info["count"], info["dtype"]), (17, 384, 300, fmt))
+                cent = json.load(open(os.path.join(d, "vectors", "centroids.json")))
+                self.assertEqual(len(base64.b64decode(cent["data"])), 17 * 384)
+                seen = []
+                for c in range(17):
+                    part = json.load(open(os.path.join(d, "vectors", f"{c}.json")))
+                    self.assertEqual(part["dtype"], fmt)
+                    self.assertEqual(len(base64.b64decode(part["data"])), len(part["ids"]) * size)
+                    self.assertEqual([part["institutions"][n] for n in part["institution_index"]],
+                                     [insts[ids.index(i)] for i in part["ids"]])
+                    seen += part["ids"]
+                self.assertEqual(sorted(seen), sorted(ids))
         finally:
             shutil.rmtree(d)
+
+    def test_bits_keep_the_sign_of_each_dimension(self):
+        q = np.array([[5, -3, 0, 7, -1, 2, 2, -8] + [1] * 8], dtype=np.int8)
+        self.assertEqual(build_search_index.pack_bits(q).tolist(), [[0b10010110, 0xFF]])
+
+    def test_bit_scores_rank_like_full_vectors(self):
+        rng = np.random.default_rng(2)
+        vecs = rng.normal(size=(2000, 384)).astype("float32")
+        vecs /= np.linalg.norm(vecs, axis=1, keepdims=True)
+        query = vecs[0] + 0.5 * rng.normal(size=384).astype("float32") / np.sqrt(384)
+        query /= np.linalg.norm(query)
+        exact = np.argsort(-(vecs @ query))[:10]
+        signs = np.unpackbits(build_search_index.pack_bits(build_search_index.quantize(vecs)), axis=1) * 2.0 - 1
+        approx = np.argsort(-(signs @ query))[:50]
+        self.assertEqual(approx[0], 0)
+        self.assertGreaterEqual(len(set(exact) & set(approx)), 5)
 
     def test_bigger_tiers_wait_for_the_site(self):
         cov = {"initial_per_institution": 1000, "tiers": [{"per_institution": 1000}, {"per_institution": 3000}]}
@@ -371,7 +438,12 @@ class BatchedWorksTests(unittest.TestCase):
 
 
 class PipelineTests(unittest.TestCase):
+    reads_vectors = False  # whether src/ is taken to read vectors/ (it does on main; must not change expectations)
+
     def setUp(self):
+        patcher = mock.patch.object(build_search_index, "site_reads_vectors", side_effect=lambda: self.reads_vectors)
+        patcher.start()
+        self.addCleanup(patcher.stop)
         self.tmp = tempfile.mkdtemp()
         self.config = os.path.join(self.tmp, "config.json")
         with open(self.config, "w") as fh:
@@ -470,6 +542,15 @@ class PipelineTests(unittest.TestCase):
     def read(self, name):
         return json.loads(pathlib.Path(self.tmp, name).read_text())
 
+    def test_embeddings_dropped_once_site_reads_vectors(self):
+        self.reads_vectors = True
+        self.ingest()
+        build_search_index.main(["--data-dir", self.tmp], encoder=FakeEncoder())
+        self.assertNotIn("embeddings_file", self.read("universities.json")[0])
+        self.assertFalse(os.path.exists(os.path.join(self.tmp, "embeddings")))
+        self.assertEqual(self.read("metadata.json")["vectors"]["count"], 3)
+        self.assertTrue(os.path.exists(os.path.join(self.tmp, "vectors", "centroids.json")))
+
     def test_shards(self):
         records, _ = self.ingest()
         build_search_index.main(["--data-dir", self.tmp], encoder=FakeEncoder())
@@ -479,7 +560,7 @@ class PipelineTests(unittest.TestCase):
         shard = self.read(uni["faculty_file"])
         self.assertEqual([r["id"] for r in shard], [r["id"] for r in records])
         self.assertEqual(self.read(uni["embeddings_file"])["ids"], [r["id"] for r in shard])
-        row = self.read("faculty_search.json")[0]
+        row = faculty.decode_search_file(self.read("faculty_search.json"))[0]
         self.assertEqual(set(row), {"id", "name", "title", "institution_id", "primary_domain", "domains",
                                     "citation_count", "email", "profile_url", "has_email", "seniority_score",
                                 "first_author_recent", "last_author_recent", "recent_works", "last_publication_year", "record_file"})

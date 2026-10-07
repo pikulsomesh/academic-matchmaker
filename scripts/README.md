@@ -62,7 +62,13 @@ verified ones. `--require-contact` drops records with neither an email nor an in
   on each publication. Verified records first.
 - `embeddings/<institution id>.json`: embeddings for the matching faculty file, same row order (format below).
 - `faculty_search.json`: one slim row per faculty member, for search, facets and cards before a
-  university's file is loaded: `{id, name, title, institution_id, primary_domain, domains (strongest first), citation_count, email, profile_url, has_email, seniority_score, first_author_recent, last_author_recent, recent_works}`.
+  university's file is loaded: `{id, name, title, institution_id, primary_domain, domains (strongest first), citation_count, email, profile_url, has_email, seniority_score, first_author_recent, last_author_recent, recent_works, last_publication_year, record_file}`.
+  Written compactly (about 100 bytes a person instead of about 500): `{format: "compact-v1", fields, institutions,
+  domains, record_files, url_prefixes, rows}` where each row is an array in `fields` order (trailing nulls
+  dropped), `institution_id` / `primary_domain` / `record_file` / each of `domains` index into the tables, a
+  `profile_url` of `"<n>|rest"` is `url_prefixes[n] + rest`, and `has_email` is `Boolean(email)`.
+  `faculty.write_search_file` writes it, `faculty.decode_search_file` and `src/data/compactRows.js` read it.
+  `search/<institution id>.json` uses the same format.
 - `domains.json`: sorted array of every domain name used in `primary_domain` / `domain_weights`.
 - `metadata.json`: `generated_at`, `last_ingestion`, `last_cdc_run`, counts, last CDC stats.
 - `faculty_index.json` + `faculty_embeddings.json`: the same data as single files. Written only while
@@ -81,12 +87,27 @@ first and `metadata.budget_reached` turns on. When there are more than `search_i
 `search/<institution id>.json` (listed as `search_file` in `universities.json`) with all of its rows,
 so the site loads one university's rows on demand. `metadata.json` records `search_index_complete`.
 
+## Hosting the data on Hugging Face
+
+With the repository variable `HF_DATASET_REPO` (e.g. `pikulsomesh/academic-matchmaker-data`) and the secret
+`HF_TOKEN` (a write token) set, the workflow pulls the published data from that dataset before planning,
+pushes `public/data` there after a build (`hf_sync.py`: one commit mirroring the folder, then a history squash),
+and commits only `scripts/config`. The first run with an empty dataset seeds it with the current data even
+when the plan skips. The size budget becomes `hosted_size_budget_mb` (8,000) instead of `size_budget_mb`.
+`deploy.yml` then builds the site with `VITE_DATA_URL=https://huggingface.co/datasets/<repo>/resolve/main/`;
+the site falls back to its bundled `public/data` while that URL doesn't answer. Without the variable and
+secret nothing changes.
+
 ## Vector search at scale (`vectors/`)
 
 `build_search_index.py` also writes an IVF index so the browser never needs every vector:
 `vectors/centroids.json` (`{k, dim, dtype: "int8", scale: 127, model, data}`, about sqrt(N) k-means
-centroids) and `vectors/<cluster>.json` (`{ids, institution_ids (parallel to ids), dim, dtype, scale, data}`). Embed the query, rank the
-centroids, load the nearest clusters, rank those exactly. `metadata.vectors` = `{k, dim, model, count}`.
+centroids) and `vectors/<cluster>.json` (`{ids, institutions, institution_index (parallel to ids, indexes into institutions), dim,
+dtype, data}`). Embed the query, rank the centroids, load the nearest clusters, rank those.
+`metadata.vectors` = `{k, dim, model, count, dtype}`. Cluster vectors follow `vector_format` in
+`config/coverage.json`: `"bits"` (default) keeps only the sign of each dimension, packed 8 per byte
+(dimension i = byte i // 8, mask 0x80 >> (i % 8)), 48 bytes a person instead of 384; the browser scores them
+against the full-precision query. `"int8"` keeps `scale: 127` int8 rows as before. Centroids stay int8.
 `embeddings/<institution id>.json` is written until `src/` mentions `vectors/centroids.json`, then dropped.
 Coverage beyond the first tier waits until `src/` mentions `record_file` (the site can read chunked full records).
 
