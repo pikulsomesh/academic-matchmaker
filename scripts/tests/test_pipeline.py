@@ -221,6 +221,28 @@ class DomainTests(unittest.TestCase):
         self.assertEqual([p["id"] for p in merged], ["W2", "W1"])
 
 
+class RoleSignalTests(unittest.TestCase):
+    def test_position_and_score(self):
+        work = {"id": "https://openalex.org/W1", "title": "T", "publication_year": 2026,
+                "authorships": [{"author": {"id": "https://openalex.org/A1"}, "author_position": "first"},
+                                {"author": {"id": "https://openalex.org/A2"}, "author_position": "last"}]}
+        self.assertEqual(faculty.publication_entry(work, "A2")["position"], "last")
+        self.assertNotIn("position", faculty.publication_entry(work))
+        pi = {"h_index": 70, "works_count": 400, "citation_count": 90000,
+              "recent_publications": [{"title": "a", "position": "last"}] * 4}
+        student = {"h_index": 10, "works_count": 21, "citation_count": 600,
+                   "recent_publications": [{"title": "a", "position": "first"}] * 4}
+        self.assertEqual(faculty.role_signals(pi)[:2], (0, 4))
+        self.assertEqual(faculty.role_signals(student)[:2], (4, 0))
+        self.assertGreater(faculty.role_signals(pi)[3], faculty.role_signals(student)[3] + 40)
+        self.assertEqual(faculty.role_signals({"h_index": 10})[:2], (0, 0))  # positions unknown: no crash
+
+    def test_merge_backfills_position(self):
+        old = [{"id": "W1", "title": "T", "date": "2026-01-01"}]
+        new = [{"id": "W1", "title": "T", "date": "2026-01-01", "position": "last"}]
+        self.assertEqual(merge_publications(old, new)[0]["position"], "last")
+
+
 class BatchedWorksTests(unittest.TestCase):
     def test_full_authors_skip_fallback(self):
         works = [work(f"W{i}", f"Paper {i}", f"2026-0{i}-01", ["A1", "A2"]) for i in range(1, 7)]
@@ -343,7 +365,8 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(self.read(uni["embeddings_file"])["ids"], [r["id"] for r in shard])
         row = self.read("faculty_search.json")[0]
         self.assertEqual(set(row), {"id", "name", "title", "institution_id", "primary_domain", "domains",
-                                    "citation_count", "email", "profile_url", "has_email"})
+                                    "citation_count", "email", "profile_url", "has_email", "seniority_score",
+                                "first_author_recent", "last_author_recent", "recent_works"})
         # Shard embeddings equal the matching rows of the combined file.
         combined = self.read("faculty_embeddings.json")
         self.assertEqual(self.read(uni["embeddings_file"])["data"], combined["data"])

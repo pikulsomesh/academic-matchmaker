@@ -1,6 +1,7 @@
 """Shared helpers for building faculty records in the blueprint schema."""
 
 import json
+import math
 import os
 from collections import defaultdict
 from datetime import date, datetime, timezone
@@ -44,13 +45,48 @@ def compute_domains(topics):
     return primary, weights
 
 
-def publication_entry(work):
-    return {
+def author_position(work, author_id):
+    """'first' | 'middle' | 'last' for this author on the work, or None when unknown."""
+    for authorship in work.get("authorships") or []:
+        if short_id((authorship.get("author") or {}).get("id")) == author_id:
+            return authorship.get("author_position")
+    return None
+
+
+def publication_entry(work, author_id=None):
+    entry = {
         "id": short_id(work.get("id")),
         "title": (work.get("title") or work.get("display_name") or "").strip(),
         "year": work.get("publication_year"),
         "date": work.get("publication_date"),
     }
+    position = author_position(work, author_id) if author_id else None
+    if position:
+        entry["position"] = position  # first author did the work; last author usually leads the group
+    return entry
+
+
+def role_signals(record):
+    """-> (first_author_recent, last_author_recent, recent_works, seniority_score 0-100).
+
+    recent_works is how many of the (up to 5) recent papers have a known author position.
+
+    seniority_score estimates "likely faculty / principal investigator" from h-index, output,
+    citations and, when known, how often the person is last author on recent papers. It only
+    orders and badges people; nobody is dropped.
+    """
+    pubs = record.get("recent_publications") or []
+    known = [p["position"] for p in pubs if p.get("position")]
+    first, last = known.count("first"), known.count("last")
+    h_index = record.get("h_index") or 0
+    works = record.get("works_count") or 0
+    cites = record.get("citation_count") or 0
+    parts = [(0.4, min(h_index / 60, 1)), (0.25, min(math.log10(works + 1) / 3, 1)),
+             (0.2, min(math.log10(cites + 1) / 5, 1))]
+    if known:
+        parts.append((0.15, last / len(known)))
+    total = sum(w for w, _ in parts)
+    return first, last, len(known), round(100 * sum(w * v for w, v in parts) / total)
 
 
 def merge_publications(existing, new_entries, limit=MAX_RECENT_PUBLICATIONS):
@@ -60,7 +96,9 @@ def merge_publications(existing, new_entries, limit=MAX_RECENT_PUBLICATIONS):
         if not pub.get("title"):
             continue
         key = pub.get("id") or pub["title"].lower()
-        by_key.setdefault(key, pub)
+        kept = by_key.setdefault(key, pub)
+        if pub.get("position") and not kept.get("position"):
+            kept["position"] = pub["position"]  # backfill the role on records built before it existed
     ordered = sorted(by_key.values(), key=lambda p: (p.get("date") or f"{p.get('year') or 0}-00-00"), reverse=True)
     return ordered[:limit]
 
@@ -168,6 +206,10 @@ def search_row(record):
         "email": record.get("email"),
         "profile_url": record.get("profile_url"),
         "has_email": bool(record.get("email")),
+        "seniority_score": record.get("seniority_score"),
+        "first_author_recent": record.get("first_author_recent"),
+        "last_author_recent": record.get("last_author_recent"),
+        "recent_works": record.get("recent_works"),
     }
 
 
@@ -175,6 +217,8 @@ def write_records(records, universities, data_dir, combined_limit=COMBINED_LIMIT
     """Write shards, the slim search index, universities.json, domains.json and (when small) faculty_index.json."""
     by_inst = {}
     for record in records:
+        (record["first_author_recent"], record["last_author_recent"],
+         record["recent_works"], record["seniority_score"]) = role_signals(record)
         by_inst.setdefault(record["institution"].get("id"), []).append(record)
     os.makedirs(os.path.join(data_dir, FACULTY_SHARD_DIR), exist_ok=True)
     keep = set()
