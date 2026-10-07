@@ -23,9 +23,10 @@ npm test        # unit tests for the matching helpers
 ```
 .github/workflows/deploy.yml   build + deploy to GitHub Pages on push to main
 scripts/                       data ingestion and monthly CDC update (Python)
-public/data/                   universities.json, faculty_index.json, domains.json
+public/data/                   universities.json, faculty_search.json, faculty/ and embeddings/ per university
 src/components/                UI components
 src/hooks/                     useFacultySearch, useLocalAI
+src/data/facultyStore.js       loads the catalog, per-university records and embedding shards
 src/ai/                        model worker, document readers, prompts, vector math
 ```
 
@@ -37,7 +38,7 @@ Everything runs in the visitor's browser; uploads never leave the device.
 2. `onnx-community/Qwen2.5-0.5B-Instruct` (4-bit ONNX, WebGPU when available, WASM otherwise) extracts research interests as JSON. Chat messages go through the same model and add to the profile.
 3. `Xenova/all-MiniLM-L6-v2` embeds the profile, and faculty are ranked by cosine similarity.
 
-Faculty vectors come from `public/data/faculty_embeddings.json` (written by `scripts/build_search_index.py`). Until that file exists, the app embeds the loaded faculty in the browser. File format:
+Search, filters and cards run on the slim `faculty_search.json`; a university's full records (`faculty/<id>.json`) load only when someone opens a profile. Faculty vectors come from `embeddings/<id>.json`, one shard per university (written by `scripts/build_search_index.py`). The matcher downloads only the shards for the universities the country and institution filters leave in view, or all of them when no filter is set, and keeps them as int8 in memory. Older builds with a single `faculty_index.json` / `faculty_embeddings.json` still work, and when no vectors are published the app embeds the loaded faculty in the browser. File format (each shard):
 
 ```json
 {

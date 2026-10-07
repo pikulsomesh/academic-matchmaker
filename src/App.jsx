@@ -15,7 +15,7 @@ const PAGE_SIZE = 24
 export default function App() {
   const search = useFacultySearch()
   const { results, loading, error, query, setQuery, sort, setSort, activeFilterCount, matchScores } = search
-  const ai = useLocalAI(search.faculty)
+  const ai = useLocalAI(search.faculty, { institutionIds: search.scopeInstitutionIds })
   const matcher = useMatcherBridge(ai)
   const { setMatchScores } = search
   useEffect(() => setMatchScores(matcher.matchScores), [matcher.matchScores, setMatchScores])

@@ -10,9 +10,5 @@ export const CHAT_MODEL = 'onnx-community/Qwen2.5-0.5B-Instruct'
 export const EMBEDDING_MODEL = 'Xenova/all-MiniLM-L6-v2'
 export const EMBEDDING_DIM = 384
 
-// Precomputed faculty vectors written by scripts/build_search_index.py.
-// When the file is missing, the hook embeds faculty in the browser instead.
-export const FACULTY_EMBEDDINGS_PATH = 'data/faculty_embeddings.json'
-
 // How much extracted document text the 0.5B model sees in one prompt.
 export const MAX_DOCUMENT_CHARS = 6000

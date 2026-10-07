@@ -1,10 +1,14 @@
-import { Award, BookOpen, MapPin, Quote } from 'lucide-react'
+import { Award, BookOpen, LoaderCircle, MapPin, Quote } from 'lucide-react'
 import Modal from './Modal.jsx'
 import { ContactLinks } from './FacultyCard.jsx'
 import { countryName, sortedWeights } from '../lib/format.js'
+import { useFullRecord } from '../data/facultyStore.js'
 
-export default function FacultyDetailModal({ faculty, onClose, matchScore }) {
-  const open = Boolean(faculty)
+// `row` is a catalog row; the full record (publications, weights, contact
+// details) loads from that university's file while the modal is open.
+export default function FacultyDetailModal({ faculty: row, onClose, matchScore }) {
+  const { faculty, loading } = useFullRecord(row)
+  const open = Boolean(row)
   const inst = faculty?.institution ?? {}
   const weights = sortedWeights(faculty?.domain_weights)
   const pubs = [...(faculty?.recent_publications ?? [])].sort((a, b) => (b.year ?? 0) - (a.year ?? 0))
@@ -50,6 +54,12 @@ export default function FacultyDetailModal({ faculty, onClose, matchScore }) {
               <p className="break-all text-xs text-mit-gray">{faculty.profile_url}</p>
             )}
           </section>
+
+          {loading && (
+            <p className="flex items-center gap-2 p-6 text-sm text-mit-gray sm:px-8">
+              <LoaderCircle className="h-4 w-4 animate-spin" /> Loading research areas and publications…
+            </p>
+          )}
 
           {weights.length > 0 && (
             <section className="space-y-3 p-6 sm:px-8">
