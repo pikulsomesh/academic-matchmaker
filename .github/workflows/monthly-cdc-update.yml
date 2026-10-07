@@ -57,7 +57,7 @@ jobs:
 
       - name: Full ingestion
         if: inputs.mode == 'full'
-        run: python scripts/initial_ingestion.py --per-institution "${{ inputs.per_institution }}"
+        run: python scripts/initial_ingestion.py --per-institution "${{ inputs.per_institution || '200' }}"
 
       - name: Monthly CDC update
         if: inputs.mode != 'full'
