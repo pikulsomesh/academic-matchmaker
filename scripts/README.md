@@ -12,7 +12,7 @@ Python 3.10+. `pip install -r scripts/requirements.txt`
 
 - **Monthly** (00:00 UTC on the 1st): `cdc_update.py` + `build_search_index.py`, commit `public/data/`, start `deploy.yml`.
 - **Daily** (02:00 UTC), and on merges that change `scripts/plan_run.py` or `scripts/config/coverage.json`:
-  if no real data is published yet, a first full build at `initial_per_institution` (200). After that,
+  if no real data is published yet, a first full build at `initial_per_institution` (now 1000). After that,
   it grows coverage toward `target_per_institution` (1000) while the published index was built with a
   smaller cap (`metadata.json` → `per_institution`) and the website reads the per-university files
   (`src/` references `faculty_search.json`). Otherwise it skips in seconds.
