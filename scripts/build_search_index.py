@@ -18,7 +18,9 @@ int8 value = round(x * 127) of the unit vector; row i belongs to ids[i].
 import argparse
 import base64
 import hashlib
+import math
 import os
+import shutil
 import sys
 import urllib.request
 
@@ -126,10 +128,71 @@ def payload(ids, texts, q):
     }
 
 
+VECTORS_DIR = "vectors"
+KMEANS_SAMPLE = 50000
+KMEANS_ITERATIONS = 8
+
+
+def kmeans(unit, k, seed=0):
+    """Plain k-means on unit vectors (float32 rows) -> k x dim unit centroids. Trained on a sample."""
+    rng = np.random.default_rng(seed)
+    sample = unit[rng.choice(len(unit), size=min(len(unit), KMEANS_SAMPLE), replace=False)]
+    centroids = sample[rng.choice(len(sample), size=k, replace=False)].copy()
+    for _ in range(KMEANS_ITERATIONS):
+        nearest = np.argmax(sample @ centroids.T, axis=1)
+        for c in range(k):
+            members = sample[nearest == c]
+            if len(members):
+                mean = members.mean(axis=0)
+                centroids[c] = mean / (np.linalg.norm(mean) or 1.0)
+    return centroids
+
+
+def build_ivf(ids, q, out_dir, k=None, institution_ids=None):
+    """IVF index for the browser: centroids.json plus one file of member ids and vectors per cluster.
+
+    The browser embeds the query, ranks the centroids, loads the nearest clusters and ranks those exactly.
+    -> {"k", "dim", "model", "count"}
+    """
+    root = os.path.join(out_dir, VECTORS_DIR)
+    shutil.rmtree(root, ignore_errors=True)
+    n = len(ids)
+    k = k or max(1, min(n, round(math.sqrt(n))))
+    unit = q.astype(np.float32) / SCALE
+    unit /= np.maximum(np.linalg.norm(unit, axis=1, keepdims=True), 1e-9)
+    centroids = kmeans(unit, k)
+    assignment = np.empty(n, dtype=np.int32)
+    for start in range(0, n, 20000):
+        assignment[start:start + 20000] = np.argmax(unit[start:start + 20000] @ centroids.T, axis=1)
+    write_json(os.path.join(root, "centroids.json"), {
+        "k": k, "dim": DIM, "dtype": "int8", "scale": SCALE, "model": MODEL_ID,
+        "data": base64.b64encode(quantize(centroids).tobytes()).decode("ascii")}, compact=True)
+    for c in range(k):
+        rows = np.flatnonzero(assignment == c)
+        write_json(os.path.join(root, f"{c}.json"), {
+            "ids": [ids[i] for i in rows],
+            "institution_ids": [institution_ids[i] for i in rows] if institution_ids else [],
+            "dim": DIM, "dtype": "int8", "scale": SCALE,
+            "data": base64.b64encode(q[rows].tobytes()).decode("ascii")}, compact=True)
+    return {"k": k, "dim": DIM, "model": MODEL_ID, "count": n}
+
+
+def site_reads_vectors():
+    """True once the website loads vectors/centroids.json, so the per-university embeddings can go."""
+    for folder, _, files in os.walk(os.path.join(ROOT, "src")):
+        for name in files:
+            if name.endswith((".js", ".jsx", ".ts", ".tsx")):
+                with open(os.path.join(folder, name), encoding="utf-8") as fh:
+                    if "vectors/centroids.json" in fh.read():
+                        return True
+    return False
+
+
 def main(argv=None, encoder=None):
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--data-dir", default=DATA_DIR)
     p.add_argument("--batch-size", type=int, default=64)
+    p.add_argument("--ivf-only", action="store_true", help="skip the per-university embeddings files")
     args = p.parse_args(argv)
 
     records, universities = load_records(args.data_dir)
@@ -138,15 +201,25 @@ def main(argv=None, encoder=None):
     q = quantize(vectors)
     ids = [r["id"] for r in records]
 
-    # One embeddings shard per university, rows in the same order as its faculty shard.
+    # One embeddings shard per university, in that university's faculty-file order. Kept until the
+    # website reads vectors/ (IVF), then dropped: one copy of the vectors keeps the data small.
+    embeddings_dir = os.path.join(args.data_dir, "embeddings")
+    use_ivf_only = args.ivf_only or site_reads_vectors()
+    if use_ivf_only:
+        shutil.rmtree(embeddings_dir, ignore_errors=True)
     row_of = {fid: i for i, fid in enumerate(ids)}
     for uni in universities:
+        if use_ivf_only:
+            uni.pop("embeddings_file", None)
+            continue
         if not uni.get("embeddings_file"):
             continue
-        shard_ids = [r["id"] for r in read_json(os.path.join(args.data_dir, uni["faculty_file"]), [])]
+        shard_ids = [r["id"] for r in records if r["institution"].get("id") == uni["id"]]
         rows = [row_of[fid] for fid in shard_ids]
         write_json(os.path.join(args.data_dir, uni["embeddings_file"]),
                    payload(shard_ids, [texts[i] for i in rows], q[rows]), compact=True)
+    write_json(os.path.join(args.data_dir, "universities.json"), universities)
+    vectors = build_ivf(ids, q, args.data_dir, institution_ids=[r["institution"].get("id") for r in records])
 
     # The single-file version exists exactly when faculty_index.json does.
     combined = os.path.join(args.data_dir, "faculty_embeddings.json")
@@ -158,6 +231,7 @@ def main(argv=None, encoder=None):
     meta_path = os.path.join(args.data_dir, "metadata.json")
     meta = read_json(meta_path, {})
     meta["embeddings"] = {"model": MODEL_ID, "dim": DIM, "dtype": "int8", "count": len(records)}
+    meta["vectors"] = vectors
     write_json(meta_path, meta)
     print(f"Embedded {len(records)} faculty ({q.nbytes / 1e6:.1f} MB of vectors)", file=sys.stderr)
 

@@ -3,6 +3,7 @@
 import json
 import math
 import os
+import shutil
 from collections import defaultdict
 from datetime import date, datetime, timezone
 
@@ -64,6 +65,12 @@ def publication_entry(work, author_id=None):
     if position:
         entry["position"] = position  # first author did the work; last author usually leads the group
     return entry
+
+
+def last_publication_year(author):
+    """Latest year with at least one work, from OpenAlex counts_by_year (about the last 10 years)."""
+    years = [c.get("year") for c in author.get("counts_by_year") or [] if c.get("works_count")]
+    return max(years) if years else None
 
 
 def role_signals(record):
@@ -187,13 +194,16 @@ def write_domains(records, path):
 FACULTY_SHARD_DIR = "faculty"
 EMBEDDING_SHARD_DIR = "embeddings"
 COMBINED_LIMIT = 30000
+SEARCH_SHARD_DIR = "search"
+RECORD_CHUNK = 1000    # people per full-record file once a university is bigger than this
+EMBEDDING_BYTES = 560  # one int8 vector (384) as base64 plus its id, per person
 
 
 def shard_paths(institution_id):
     return (f"{FACULTY_SHARD_DIR}/{institution_id}.json", f"{EMBEDDING_SHARD_DIR}/{institution_id}.json")
 
 
-def search_row(record):
+def search_row(record, record_file=None):
     """Slim record for faculty_search.json: enough to search, filter, sort and draw a card."""
     return {
         "id": record["id"],
@@ -210,30 +220,93 @@ def search_row(record):
         "first_author_recent": record.get("first_author_recent"),
         "last_author_recent": record.get("last_author_recent"),
         "recent_works": record.get("recent_works"),
+        "last_publication_year": record.get("last_publication_year"),
+        "record_file": record_file,
     }
 
 
-def write_records(records, universities, data_dir, combined_limit=COMBINED_LIMIT):
-    """Write shards, the slim search index, universities.json, domains.json and (when small) faculty_index.json."""
-    by_inst = {}
+def importance(record):
+    """Ordering used to decide who stays when the data has to shrink: likely PIs and well-cited first."""
+    return (record.get("seniority_score") or 0, record.get("citation_count") or 0)
+
+
+def estimated_bytes(record):
+    """What one person costs on disk: full record + two slim rows (global index and university file) + vector."""
+    return (len(json.dumps(record, ensure_ascii=False)) + 2 * len(json.dumps(search_row(record), ensure_ascii=False))
+            + EMBEDDING_BYTES)
+
+
+def prune_to_budget(records, budget_bytes):
+    """Drop the least important people until the estimated data size fits. -> (kept, dropped_count)."""
+    costs = {r["id"]: estimated_bytes(r) for r in records}
+    total = sum(costs.values())
+    if budget_bytes is None or total <= budget_bytes:
+        return records, 0
+    dropped = set()
+    for record in sorted(records, key=importance):
+        if total <= budget_bytes:
+            break
+        dropped.add(record["id"])
+        total -= costs[record["id"]]
+    return [r for r in records if r["id"] not in dropped], len(dropped)
+
+
+def write_records(records, universities, data_dir, combined_limit=COMBINED_LIMIT,
+                  budget_bytes=None, search_index_rows=None):
+    """Write shards, the slim search index, universities.json, domains.json and (when small) faculty_index.json.
+
+    budget_bytes: shrink the data to fit (least important people dropped first; `records` is updated in place).
+    search_index_rows: faculty_search.json keeps only this many people (the most important); everyone
+    is then also in search/<institution id>.json so the site can load one university's rows on demand.
+    -> {"pruned", "faculty_count", "search_index_rows", "search_index_complete"}
+    """
     for record in records:
         (record["first_author_recent"], record["last_author_recent"],
          record["recent_works"], record["seniority_score"]) = role_signals(record)
+    records[:], pruned = prune_to_budget(records, budget_bytes)
+    by_inst = {}
+    for record in records:
         by_inst.setdefault(record["institution"].get("id"), []).append(record)
     os.makedirs(os.path.join(data_dir, FACULTY_SHARD_DIR), exist_ok=True)
+    complete = search_index_rows is None or len(records) <= search_index_rows
+    search_dir = os.path.join(data_dir, SEARCH_SHARD_DIR)
+    if os.path.isdir(search_dir):
+        shutil.rmtree(search_dir)
+    if not complete:
+        os.makedirs(search_dir)
     keep = set()
+    file_of = {}
     for uni in universities:
-        faculty_file, embeddings_file = shard_paths(uni["id"])
-        uni["faculty_file"], uni["embeddings_file"] = faculty_file, embeddings_file
-        uni["faculty_count"] = len(by_inst.get(uni["id"], []))
-        write_faculty_index(by_inst.get(uni["id"], []), os.path.join(data_dir, faculty_file))
-        keep.add(os.path.basename(faculty_file))
+        people = sorted(by_inst.get(uni["id"], []), key=importance, reverse=True)
+        uni["embeddings_file"] = shard_paths(uni["id"])[1]
+        uni["faculty_count"] = len(people)
+        if len(people) <= RECORD_CHUNK:
+            files = [shard_paths(uni["id"])[0]]
+            write_faculty_index(people, os.path.join(data_dir, files[0]))
+            keep.add(f"{uni['id']}.json")
+        else:
+            files = []
+            shutil.rmtree(os.path.join(data_dir, FACULTY_SHARD_DIR, uni["id"]), ignore_errors=True)  # stale chunks
+            for n, start in enumerate(range(0, len(people), RECORD_CHUNK)):
+                path = f"{FACULTY_SHARD_DIR}/{uni['id']}/{n}.json"
+                write_faculty_index(people[start:start + RECORD_CHUNK], os.path.join(data_dir, path))
+                files.append(path)
+            keep.add(uni["id"])
+        for n, record in enumerate(people):
+            file_of[record["id"]] = files[n // RECORD_CHUNK]
+        uni["faculty_files"], uni["faculty_file"] = files, files[0]
+        uni.pop("search_file", None)
+        if not complete:
+            uni["search_file"] = f"{SEARCH_SHARD_DIR}/{uni['id']}.json"
+            write_faculty_index([search_row(r, file_of[r["id"]]) for r in people], os.path.join(data_dir, uni["search_file"]))
     shard_dir = os.path.join(data_dir, FACULTY_SHARD_DIR)
-    for name in os.listdir(shard_dir):  # universities dropped from the config
-        if name.endswith(".json") and name not in keep:
-            os.remove(os.path.join(shard_dir, name))
+    for name in os.listdir(shard_dir):  # universities dropped from the config, or files that became chunks
+        if name not in keep:
+            full = os.path.join(shard_dir, name)
+            shutil.rmtree(full) if os.path.isdir(full) else os.remove(full)
 
-    write_faculty_index([search_row(r) for r in records], os.path.join(data_dir, "faculty_search.json"))
+    top = records if complete else sorted(records, key=importance, reverse=True)[:search_index_rows]
+    write_faculty_index([search_row(r, file_of[r["id"]]) for r in top], os.path.join(data_dir, "faculty_search.json"))
     write_json(os.path.join(data_dir, "universities.json"), universities)
     write_domains(records, os.path.join(data_dir, "domains.json"))
     combined = os.path.join(data_dir, "faculty_index.json")
@@ -241,6 +314,8 @@ def write_records(records, universities, data_dir, combined_limit=COMBINED_LIMIT
         write_faculty_index(records, combined)
     elif os.path.exists(combined):
         os.remove(combined)
+    return {"pruned": pruned, "faculty_count": len(records), "search_index_rows": len(top),
+            "search_index_complete": complete}
 
 
 def load_records(data_dir):
@@ -249,6 +324,7 @@ def load_records(data_dir):
     if universities and all(u.get("faculty_file") for u in universities):
         records = []
         for uni in universities:
-            records.extend(read_json(os.path.join(data_dir, uni["faculty_file"]), []))
+            for path in uni.get("faculty_files") or [uni["faculty_file"]]:
+                records.extend(read_json(os.path.join(data_dir, path), []))
         return records, universities
     return read_json(os.path.join(data_dir, "faculty_index.json"), []), universities

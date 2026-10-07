@@ -22,7 +22,7 @@ import sys
 from datetime import date, timedelta
 
 from faculty import (AUTHOR_SELECT, DATA_DIR, WORK_SELECT, compute_domains, contact_flags, merge_publications,
-                     load_records, now_iso, publication_entry, read_json, today_iso, write_json,
+                     last_publication_year, load_records, now_iso, publication_entry, read_json, today_iso, write_json,
                      write_records)
 from openalex import MAX_OR_VALUES, OpenAlexClient, chunks, short_id
 
@@ -92,13 +92,17 @@ def run(data_dir, client, overlap_days=30, since=None, until=None):
         record["citation_count"] = author.get("cited_by_count", record.get("citation_count", 0))
         record["works_count"] = author.get("works_count", record.get("works_count"))
         record["h_index"] = (author.get("summary_stats") or {}).get("h_index", record.get("h_index"))
+        record["last_publication_year"] = last_publication_year(author) or record.get("last_publication_year")
         primary, weights = compute_domains(author.get("topics"))
         if weights:
             record["primary_domain"], record["domain_weights"] = primary, weights
         record["flags"] = contact_flags(record)
         refreshed += 1
 
-    write_records(records, universities, data_dir)
+    coverage = read_json(os.path.join(os.path.dirname(os.path.abspath(__file__)), "config", "coverage.json"), {})
+    stats = write_records(records, universities, data_dir,
+                          budget_bytes=int(coverage["size_budget_mb"] * 1e6) if coverage.get("size_budget_mb") else None,
+                          search_index_rows=coverage.get("search_index_rows"))
     meta.update({
         "generated_at": now_iso(),
         "last_cdc_run": until,
@@ -111,6 +115,9 @@ def run(data_dir, client, overlap_days=30, since=None, until=None):
             "openalex_requests": client.request_count,
         },
         "faculty_count": len(records),
+        "pruned_for_size": stats["pruned"],
+        "search_index_rows": stats["search_index_rows"],
+        "search_index_complete": stats["search_index_complete"],
     })
     write_json(meta_path, meta)
     log(f"Scanned {scanned} works; {added} new publications for {len(new_by_author)} faculty; "

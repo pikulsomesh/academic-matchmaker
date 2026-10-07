@@ -55,7 +55,9 @@ verified ones. `--require-contact` drops records with neither an email nor an in
 ## Output files (`public/data/`)
 
 - `universities.json`: `[{id, name, country_code, rank, homepage_url, faculty_count, faculty_file, embeddings_file}]`
-- `faculty/<institution id>.json`: that university's records, one per line. Blueprint schema plus
+- `faculty/<institution id>.json`: that university's records, one per line (universities over 1,000 people are
+  split into `faculty/<institution id>/<n>.json`, 1,000 per file, most important first; `universities.json`
+  lists them as `faculty_files`, and every slim row carries `record_file`, the file holding its record). Blueprint schema plus
   `institution.id`, `h_index`, `works_count`, `orcid`, `profile_source`, `flags`, and `id`/`date`
   on each publication. Verified records first.
 - `embeddings/<institution id>.json`: embeddings for the matching faculty file, same row order (format below).
@@ -66,6 +68,27 @@ verified ones. `--require-contact` drops records with neither an email nor an in
 - `faculty_index.json` + `faculty_embeddings.json`: the same data as single files. Written only while
   the index has at most 30,000 records (`COMBINED_LIMIT` in `faculty.py`) and deleted above that,
   since one file that large is too slow for the browser.
+
+## Growing the database
+
+`config/coverage.json` holds the plan. Each daily run builds the next tier in `tiers` (1,000, 3,000,
+10,000, 25,000, 50,000 people per university) with looser thresholds each step (works, citations,
+h-index), keeping anyone with a paper in the last `window_years` (10). Each record has
+`last_publication_year`. Growth stops by itself when the data would pass `size_budget_mb` (800, under
+GitHub Pages' 1 GB): the least important people (lowest `seniority_score`, then citations) are dropped
+first and `metadata.budget_reached` turns on. When there are more than `search_index_rows` people
+(100,000), `faculty_search.json` keeps only the most important of them and every university also gets
+`search/<institution id>.json` (listed as `search_file` in `universities.json`) with all of its rows,
+so the site loads one university's rows on demand. `metadata.json` records `search_index_complete`.
+
+## Vector search at scale (`vectors/`)
+
+`build_search_index.py` also writes an IVF index so the browser never needs every vector:
+`vectors/centroids.json` (`{k, dim, dtype: "int8", scale: 127, model, data}`, about sqrt(N) k-means
+centroids) and `vectors/<cluster>.json` (`{ids, institution_ids (parallel to ids), dim, dtype, scale, data}`). Embed the query, rank the
+centroids, load the nearest clusters, rank those exactly. `metadata.vectors` = `{k, dim, model, count}`.
+`embeddings/<institution id>.json` is written until `src/` mentions `vectors/centroids.json`, then dropped.
+Coverage beyond the first tier waits until `src/` mentions `record_file` (the site can read chunked full records).
 
 ## Role signals
 
