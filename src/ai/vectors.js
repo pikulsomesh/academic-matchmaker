@@ -145,7 +145,7 @@ export function rankIndexes(query, indexes, limit = Infinity) {
       let dot = 0
       const offset = r * dim
       for (let i = 0; i < dim; i++) dot += q[i] * values[offset + i]
-      scored.push({ id: ids[r], score: index.matrix ? dot : dot * index.invNorm[r] })
+      scored.push({ id: ids[r], score: index.matrix ? dot : dot * index.invNorm[r], institutionId: index.institutionId })
     }
   }
   scored.sort((a, b) => b.score - a.score)

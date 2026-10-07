@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ArrowUpDown, Search, SlidersHorizontal, Sparkles, X } from 'lucide-react'
+import { ArrowUpDown, Info, Search, SlidersHorizontal, Sparkles, X } from 'lucide-react'
 import Navbar from './components/Navbar.jsx'
 import FilterSidebar from './components/FilterSidebar.jsx'
 import MatcherInterface from './components/MatcherInterface.jsx'
@@ -12,13 +12,33 @@ import useMatcherBridge from './hooks/useMatcherBridge.js'
 
 const PAGE_SIZE = 24
 
+// Explains what a large build's results cover (null when they cover everyone).
+function coverageMessage(coverage, filtered, matchScope) {
+  if (coverage.loadingUniversities > 0) return 'Loading every researcher at the selected universities…'
+  if (matchScope) {
+    return `AI matches come from the top ${matchScope.universities} of ${matchScope.totalUniversities} universities. Pick a country or university to match everyone there.`
+  }
+  if (!coverage.partial) return null
+  if (!filtered) {
+    return `Searching the ${coverage.loadedRows.toLocaleString()} most active of ${coverage.totalRows.toLocaleString()} researchers. Pick a country or university to search everyone there.`
+  }
+  if (coverage.skippedUniversities > 0) {
+    return `This country has too many researchers to load at once, so ${coverage.skippedUniversities} lower-ranked universities show only their most active people. Pick a university to search everyone there.`
+  }
+  return null
+}
+
 export default function App() {
   const search = useFacultySearch()
   const { results, loading, error, query, setQuery, sort, setSort, activeFilterCount, matchScores } = search
   const ai = useLocalAI(search.faculty, { institutionIds: search.scopeInstitutionIds })
   const matcher = useMatcherBridge(ai)
-  const { setMatchScores } = search
+  const { setMatchScores, loadUniversities, coverage } = search
   useEffect(() => setMatchScores(matcher.matchScores), [matcher.matchScores, setMatchScores])
+  // Large builds: bring in the rows of AI matches outside the catalog.
+  useEffect(() => loadUniversities(ai.missingInstitutionIds), [ai.missingInstitutionIds, loadUniversities])
+  const filtered = Boolean(search.filters.country || search.filters.institution)
+  const coverageNote = coverageMessage(coverage, filtered, matchScores ? ai.matchScope : null)
 
   const [selected, setSelected] = useState(null)
   const [aboutOpen, setAboutOpen] = useState(false)
@@ -31,7 +51,7 @@ export default function App() {
 
   return (
     <div className="flex min-h-screen flex-col bg-white">
-      <Navbar onAboutClick={() => setAboutOpen(true)} facultyCount={search.faculty.length} />
+      <Navbar onAboutClick={() => setAboutOpen(true)} facultyCount={coverage.totalRows || search.faculty.length} />
 
       <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-8 sm:px-6 lg:py-10">
         <div className="mb-8 max-w-3xl">
@@ -119,6 +139,13 @@ export default function App() {
                   <Sparkles className="h-4 w-4" /> Show my matches again
                 </button>
               )
+            )}
+
+            {!loading && !error && coverageNote && (
+              <p className="flex items-start gap-2 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-600">
+                <Info className="mt-0.5 h-4 w-4 shrink-0 text-mit-gray" />
+                <span>{coverageNote}</span>
+              </p>
             )}
 
             {!loading && !error && (

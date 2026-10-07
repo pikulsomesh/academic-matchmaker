@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Index } from 'flexsearch'
-import { loadCatalog } from '../data/facultyStore.js'
+import { loadCatalog, loadUniversityRows } from '../data/facultyStore.js'
 import { piScoreOf } from '../lib/roles.js'
 
 export const EMPTY_FILTERS = { country: '', institution: '', domains: [] }
@@ -25,6 +25,10 @@ function personText(f) {
 }
 
 const INDEX_CHUNK = 2000
+
+// Most rows a country or university filter loads on top of the catalog
+// (search/<id>.json files, best-ranked universities first).
+const SCOPE_ROW_LIMIT = 150_000
 
 // Builds the FlexSearch index a chunk at a time so ~100k rows don't freeze the
 // page; resolves to null if cancelled. Institution names and domains repeat
@@ -70,6 +74,10 @@ function search(q, faculty, index) {
  * `setMatchScores` takes an optional `{ [facultyId]: score }` map (0–1) from
  * the local AI matcher. While set, only scored faculty are shown and the
  * "relevance" sort orders by that score.
+ *
+ * On large builds the catalog holds only the most important people
+ * (`coverage.partial`). Picking a country or university loads everyone there,
+ * and `loadUniversities(ids)` does the same for other callers (AI matches).
  */
 export default function useFacultySearch() {
   const [faculty, setFaculty] = useState([])
@@ -77,6 +85,9 @@ export default function useFacultySearch() {
   const [allDomains, setAllDomains] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [catalogInfo, setCatalogInfo] = useState({ partial: false, totalRows: 0 })
+  const [pendingUniversities, setPendingUniversities] = useState(0)
+  const loadedUniversities = useRef(new Set())
 
   const [query, setQuery] = useState('')
   const [filters, setFilters] = useState(EMPTY_FILTERS)
@@ -96,8 +107,9 @@ export default function useFacultySearch() {
   useEffect(() => {
     let cancelled = false
     loadCatalog()
-      .then(({ rows, universities: unis, domains }) => {
+      .then(({ rows, universities: unis, domains, partial, totalRows }) => {
         if (cancelled) return
+        setCatalogInfo({ partial: Boolean(partial), totalRows: totalRows ?? rows.length })
         setFaculty(rows)
         setUniversities(unis)
         setAllDomains(domains)
@@ -108,6 +120,29 @@ export default function useFacultySearch() {
       cancelled = true
     }
   }, [])
+
+  // Adds every row of these universities (large builds only), skipping people already listed.
+  const loadUniversities = useCallback(
+    (ids) => {
+      if (!catalogInfo.partial) return
+      const wanted = ids.filter((id) => id && !loadedUniversities.current.has(id))
+      if (!wanted.length) return
+      wanted.forEach((id) => loadedUniversities.current.add(id))
+      setPendingUniversities((n) => n + wanted.length)
+      loadUniversityRows(wanted)
+        .then((rows) => {
+          if (!rows.length) return
+          setFaculty((prev) => {
+            const seen = new Set(prev.map((f) => f.id))
+            const added = rows.filter((r) => !seen.has(r.id))
+            return added.length ? prev.concat(added) : prev
+          })
+        })
+        .catch(() => wanted.forEach((id) => loadedUniversities.current.delete(id)))
+        .finally(() => setPendingUniversities((n) => n - wanted.length))
+    },
+    [catalogInfo.partial],
+  )
 
   const [index, setIndex] = useState(null)
   useEffect(() => {
@@ -126,8 +161,22 @@ export default function useFacultySearch() {
     const institutions = new Map()
     const domains = new Map(allDomains.map((d) => [d, 0]))
 
+    // A partial catalog undercounts, so universities and countries take their
+    // published totals; universities only listed there still appear.
+    if (catalogInfo.partial) {
+      for (const u of universities) {
+        if (!u.faculty_count) continue
+        institutions.set(u.name, { id: u.id, name: u.name, country_code: u.country_code, rank: u.rank, count: u.faculty_count })
+        if (u.country_code) countries.set(u.country_code, (countries.get(u.country_code) ?? 0) + u.faculty_count)
+      }
+    }
+
     for (const f of faculty) {
       const inst = f.institution ?? {}
+      if (catalogInfo.partial && institutions.has(inst.name)) {
+        for (const d of facultyDomains(f)) domains.set(d, (domains.get(d) ?? 0) + 1)
+        continue
+      }
       if (inst.country_code) countries.set(inst.country_code, (countries.get(inst.country_code) ?? 0) + 1)
       if (inst.name) {
         const entry = institutions.get(inst.name) ?? {
@@ -153,7 +202,7 @@ export default function useFacultySearch() {
       institutionsAll,
       domains: [...domains].map(([name, count]) => ({ name, count })).sort((a, b) => a.name.localeCompare(b.name)),
     }
-  }, [faculty, universities, allDomains, filters.country])
+  }, [faculty, universities, allDomains, filters.country, catalogInfo.partial])
 
   const results = useMemo(() => {
     const q = query.trim()
@@ -211,6 +260,36 @@ export default function useFacultySearch() {
       .filter(Boolean)
   }, [options.institutionsAll, filters.country, filters.institution])
 
+  // Universities in scope whose rows a partial catalog still lacks: loaded
+  // best-ranked first up to SCOPE_ROW_LIMIT people, the rest left out.
+  const [scopeSkipped, setScopeSkipped] = useState(0)
+  useEffect(() => {
+    if (!catalogInfo.partial || !scopeInstitutionIds) {
+      setScopeSkipped(0)
+      return
+    }
+    const byId = new Map(options.institutionsAll.map((i) => [i.id, i]))
+    const ranked = scopeInstitutionIds.map((id) => byId.get(id)).filter(Boolean)
+    ranked.sort((a, b) => (a.rank ?? 999) - (b.rank ?? 999))
+    const picked = []
+    let rows = 0
+    for (const inst of ranked) {
+      if (picked.length && rows + inst.count > SCOPE_ROW_LIMIT) break
+      picked.push(inst.id)
+      rows += inst.count
+    }
+    setScopeSkipped(ranked.length - picked.length)
+    loadUniversities(picked)
+  }, [catalogInfo.partial, scopeInstitutionIds, options.institutionsAll, loadUniversities])
+
+  const coverage = {
+    partial: catalogInfo.partial,
+    loadedRows: faculty.length,
+    totalRows: Math.max(catalogInfo.totalRows, faculty.length),
+    loadingUniversities: pendingUniversities,
+    skippedUniversities: scopeSkipped,
+  }
+
   const activeFilterCount =
     (filters.country ? 1 : 0) + (filters.institution ? 1 : 0) + filters.domains.length
 
@@ -231,5 +310,7 @@ export default function useFacultySearch() {
     matchScores,
     setMatchScores,
     scopeInstitutionIds,
+    coverage,
+    loadUniversities,
   }
 }
