@@ -8,11 +8,18 @@ Python 3.10+. `pip install -r scripts/requirements.txt`
 | `cdc_update.py` | Monthly update: new works since the last run, refreshed citations and domains |
 | `build_search_index.py` | MiniLM embeddings for every faculty record (run after either script above) |
 
-`.github/workflows/monthly-cdc-update.yml` runs `cdc_update.py` + `build_search_index.py` at
-00:00 UTC on the 1st of each month, commits `public/data/`, then starts `deploy.yml`.
-Run it by hand from the Actions tab with **mode = full** to do the first full ingestion. A full
-run takes hours. If it stops (time limit or OpenAlex's daily budget), run it again, the next day
-if the budget ran out, and it resumes from its saved cache.
+`.github/workflows/monthly-cdc-update.yml` (`scripts/plan_run.py` decides what each run does):
+
+- **Monthly** (00:00 UTC on the 1st): `cdc_update.py` + `build_search_index.py`, commit `public/data/`, start `deploy.yml`.
+- **Daily** (02:00 UTC): grows coverage toward `scripts/config/coverage.json` → `target_per_institution`
+  (1000). It runs a full build only when the first full build exists, the published index was built
+  with a smaller cap (`metadata.json` → `per_institution`), and the website reads the per-university
+  files (`src/` references `faculty_search.json`). Otherwise it skips in seconds.
+- **Manual**: Actions tab → Run workflow, with **mode = full** for the first build.
+
+Full builds stop themselves after 270 minutes or when OpenAlex's daily budget runs out (exit code 75,
+shown as a "paused" notice). Progress stays cached and the next run, daily or manual, resumes it.
+Nothing is committed until a build finishes.
 
 Set the repository secret `OPENALEX_API_KEY` (free at openalex.org/settings/api). OpenAlex bills
 per request: without a key the daily budget is about 1,000 list calls, with a free key about
