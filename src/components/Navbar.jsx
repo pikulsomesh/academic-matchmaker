@@ -1,19 +1,26 @@
 import { GraduationCap, Info } from 'lucide-react'
 
-// Stub: the UI thread replaces this with the full Navbar.
-export default function Navbar({ onAboutClick }) {
+export default function Navbar({ onAboutClick, facultyCount }) {
   return (
-    <header className="border-b border-gray-100">
-      <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
-        <div className="flex items-center gap-2">
-          <GraduationCap className="h-6 w-6 text-cardinal" />
-          <span className="text-lg font-semibold tracking-tight text-charcoal">
-            Global Academic Matchmaker
+    <header className="sticky top-0 z-30 border-b border-gray-100 bg-white/90 backdrop-blur">
+      <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4 sm:px-6">
+        <a href="./" className="flex min-w-0 items-center gap-3">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-cardinal text-white">
+            <GraduationCap className="h-5 w-5" />
           </span>
-        </div>
+          <span className="min-w-0">
+            <span className="block truncate text-base font-semibold tracking-tight text-charcoal sm:text-lg">
+              Global Academic Matchmaker
+            </span>
+            <span className="hidden text-xs text-mit-gray sm:block">
+              {facultyCount ? `${facultyCount.toLocaleString()} faculty · ` : ''}Top 100 global universities
+            </span>
+          </span>
+        </a>
         <button
+          type="button"
           onClick={onAboutClick}
-          className="flex items-center gap-1 text-sm text-mit-gray hover:text-cardinal"
+          className="flex shrink-0 items-center gap-1.5 rounded-xl border border-gray-100 px-3 py-2 text-sm font-medium text-charcoal transition hover:border-cardinal/30 hover:text-cardinal"
         >
           <Info className="h-4 w-4" /> About
         </button>
