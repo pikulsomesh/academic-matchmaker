@@ -60,7 +60,7 @@ verified ones. `--require-contact` drops records with neither an email nor an in
   on each publication. Verified records first.
 - `embeddings/<institution id>.json`: embeddings for the matching faculty file, same row order (format below).
 - `faculty_search.json`: one slim row per faculty member, for search, facets and cards before a
-  university's file is loaded: `{id, name, title, institution_id, primary_domain, domains (strongest first), citation_count, email, profile_url, has_email, seniority_score}`.
+  university's file is loaded: `{id, name, title, institution_id, primary_domain, domains (strongest first), citation_count, email, profile_url, has_email, seniority_score, first_author_recent, last_author_recent, recent_works}`.
 - `domains.json`: sorted array of every domain name used in `primary_domain` / `domain_weights`.
 - `metadata.json`: `generated_at`, `last_ingestion`, `last_cdc_run`, counts, last CDC stats.
 - `faculty_index.json` + `faculty_embeddings.json`: the same data as single files. Written only while
@@ -72,7 +72,7 @@ verified ones. `--require-contact` drops records with neither an email nor an in
 OpenAlex affiliations include students and staff, so every record is a *researcher*, with a rough
 guess at who leads a group. Each recent publication carries `position` (`first`, `middle`, `last`,
 the author's place on the paper). Records get `first_author_recent` (did the work, can speak in
-detail), `last_author_recent` (usually the principal investigator, likely holds the funding) and
+detail), `recent_works` (how many of those up to 5 papers have a known position), `last_author_recent` (usually the principal investigator, likely holds the funding) and
 `seniority_score` 0-100: h-index, output and citations, plus the last-author share when positions
 are known. It is recomputed on every write, so a monthly update fills it in for older data. It only
 orders and badges people; nobody is dropped.

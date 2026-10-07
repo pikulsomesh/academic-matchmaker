@@ -67,7 +67,9 @@ def publication_entry(work, author_id=None):
 
 
 def role_signals(record):
-    """-> (first_author_recent, last_author_recent, seniority_score 0-100).
+    """-> (first_author_recent, last_author_recent, recent_works, seniority_score 0-100).
+
+    recent_works is how many of the (up to 5) recent papers have a known author position.
 
     seniority_score estimates "likely faculty / principal investigator" from h-index, output,
     citations and, when known, how often the person is last author on recent papers. It only
@@ -84,7 +86,7 @@ def role_signals(record):
     if known:
         parts.append((0.15, last / len(known)))
     total = sum(w for w, _ in parts)
-    return first, last, round(100 * sum(w * v for w, v in parts) / total)
+    return first, last, len(known), round(100 * sum(w * v for w, v in parts) / total)
 
 
 def merge_publications(existing, new_entries, limit=MAX_RECENT_PUBLICATIONS):
@@ -205,6 +207,9 @@ def search_row(record):
         "profile_url": record.get("profile_url"),
         "has_email": bool(record.get("email")),
         "seniority_score": record.get("seniority_score"),
+        "first_author_recent": record.get("first_author_recent"),
+        "last_author_recent": record.get("last_author_recent"),
+        "recent_works": record.get("recent_works"),
     }
 
 
@@ -212,7 +217,8 @@ def write_records(records, universities, data_dir, combined_limit=COMBINED_LIMIT
     """Write shards, the slim search index, universities.json, domains.json and (when small) faculty_index.json."""
     by_inst = {}
     for record in records:
-        record["first_author_recent"], record["last_author_recent"], record["seniority_score"] = role_signals(record)
+        (record["first_author_recent"], record["last_author_recent"],
+         record["recent_works"], record["seniority_score"]) = role_signals(record)
         by_inst.setdefault(record["institution"].get("id"), []).append(record)
     os.makedirs(os.path.join(data_dir, FACULTY_SHARD_DIR), exist_ok=True)
     keep = set()

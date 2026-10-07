@@ -234,7 +234,7 @@ class RoleSignalTests(unittest.TestCase):
                    "recent_publications": [{"title": "a", "position": "first"}] * 4}
         self.assertEqual(faculty.role_signals(pi)[:2], (0, 4))
         self.assertEqual(faculty.role_signals(student)[:2], (4, 0))
-        self.assertGreater(faculty.role_signals(pi)[2], faculty.role_signals(student)[2] + 40)
+        self.assertGreater(faculty.role_signals(pi)[3], faculty.role_signals(student)[3] + 40)
         self.assertEqual(faculty.role_signals({"h_index": 10})[:2], (0, 0))  # positions unknown: no crash
 
     def test_merge_backfills_position(self):
@@ -365,7 +365,8 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(self.read(uni["embeddings_file"])["ids"], [r["id"] for r in shard])
         row = self.read("faculty_search.json")[0]
         self.assertEqual(set(row), {"id", "name", "title", "institution_id", "primary_domain", "domains",
-                                    "citation_count", "email", "profile_url", "has_email", "seniority_score"})
+                                    "citation_count", "email", "profile_url", "has_email", "seniority_score",
+                                "first_author_recent", "last_author_recent", "recent_works"})
         # Shard embeddings equal the matching rows of the combined file.
         combined = self.read("faculty_embeddings.json")
         self.assertEqual(self.read(uni["embeddings_file"])["data"], combined["data"])
