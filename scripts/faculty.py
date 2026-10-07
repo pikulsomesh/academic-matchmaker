@@ -163,8 +163,10 @@ def search_row(record):
         "title": record.get("title"),
         "institution_id": record["institution"].get("id"),
         "primary_domain": record.get("primary_domain"),
-        "domains": list((record.get("domain_weights") or {}).keys()),
+        "domains": [name for name, _ in sorted((record.get("domain_weights") or {}).items(), key=lambda kv: -kv[1])],
         "citation_count": record.get("citation_count", 0),
+        "email": record.get("email"),
+        "profile_url": record.get("profile_url"),
         "has_email": bool(record.get("email")),
     }
 
