@@ -203,7 +203,7 @@ class SizeAndIndexTests(unittest.TestCase):
             shutil.rmtree(d)
 
 
-class ChunkTests(unittest.TestCase):
+class ChunkAndVectorTests(unittest.TestCase):
     def test_big_university_gets_chunks_with_record_file(self):
         d = tempfile.mkdtemp()
         try:
@@ -224,6 +224,28 @@ class ChunkTests(unittest.TestCase):
         finally:
             shutil.rmtree(d)
 
+    def test_ivf_clusters_cover_everyone(self):
+        d = tempfile.mkdtemp()
+        try:
+            rng = np.random.default_rng(1)
+            vecs = rng.normal(size=(300, 384)).astype("float32")
+            vecs /= np.linalg.norm(vecs, axis=1, keepdims=True)
+            q = build_search_index.quantize(vecs)
+            ids = [f"A{i}" for i in range(300)]
+            info = build_search_index.build_ivf(ids, q, d, institution_ids=["I" + str(i % 3) for i in range(300)])
+            self.assertEqual((info["k"], info["dim"], info["count"]), (17, 384, 300))
+            cent = json.load(open(os.path.join(d, "vectors", "centroids.json")))
+            self.assertEqual(len(base64.b64decode(cent["data"])), 17 * 384)
+            seen = []
+            for c in range(17):
+                part = json.load(open(os.path.join(d, "vectors", f"{c}.json")))
+                self.assertEqual(len(base64.b64decode(part["data"])), len(part["ids"]) * 384)
+                self.assertEqual(len(part["institution_ids"]), len(part["ids"]))
+                seen += part["ids"]
+            self.assertEqual(sorted(seen), sorted(ids))
+        finally:
+            shutil.rmtree(d)
+
     def test_bigger_tiers_wait_for_the_site(self):
         cov = {"initial_per_institution": 1000, "tiers": [{"per_institution": 1000}, {"per_institution": 3000}]}
         meta = {"last_ingestion": "x", "per_institution": 1000}
@@ -232,9 +254,9 @@ class ChunkTests(unittest.TestCase):
         self.assertEqual(plan_run.plan(*args, chunks_ready=True)[:2], ("full", 3000))
         d = tempfile.mkdtemp()
         try:
-            pathlib.Path(d, "a.js").write_text("fetch(row.faculty_file)")
+            pathlib.Path(d, "a.js").write_text("row.record_file")
             self.assertFalse(plan_run.site_reads_chunks(d))
-            pathlib.Path(d, "b.js").write_text("fetch(row.record_file)")
+            pathlib.Path(d, "b.js").write_text("fetch('vectors/centroids.json')")
             self.assertTrue(plan_run.site_reads_chunks(d))
         finally:
             shutil.rmtree(d)

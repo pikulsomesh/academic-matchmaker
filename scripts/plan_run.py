@@ -60,14 +60,15 @@ def tier_for(coverage, per_institution):
 
 
 def site_reads_chunks(src_dir=SRC_DIR):
-    """True once the website follows record_file to chunked full records (needed past the first tier)."""
+    """True once the website follows record_file and loads vectors/centroids.json (needed past the first tier)."""
+    found = set()
     for folder, _, files in os.walk(src_dir):
         for name in files:
             if name.endswith((".js", ".jsx", ".ts", ".tsx")):
                 with open(os.path.join(folder, name), encoding="utf-8") as fh:
-                    if "record_file" in fh.read():
-                        return True
-    return False
+                    text = fh.read()
+                found.update(w for w in ("record_file", "vectors/centroids.json") if w in text)
+    return len(found) == 2
 
 
 def plan(event, schedule, mode_input, per_institution_input, metadata, coverage, shards_ready, chunks_ready=True):
@@ -91,7 +92,7 @@ def plan(event, schedule, mode_input, per_institution_input, metadata, coverage,
     if not shards_ready:
         return "skip", bigger[0], "waiting for the website to read per-university files"
     if bigger[0] > tier_sizes(coverage)[0] and not chunks_ready:
-        return "skip", bigger[0], "waiting for the website to read chunked records (record_file)"
+        return "skip", bigger[0], "waiting for the website to read chunked records and vectors"
     return "full", bigger[0], f"expanding coverage from {built} to {bigger[0]} per institution"
 
 

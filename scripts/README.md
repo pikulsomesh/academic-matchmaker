@@ -71,8 +71,6 @@ verified ones. `--require-contact` drops records with neither an email nor an in
 
 ## Growing the database
 
-Coverage beyond the first tier waits until `src/` mentions `record_file` (so the site can read chunked full records).
-
 `config/coverage.json` holds the plan. Each daily run builds the next tier in `tiers` (1,000, 3,000,
 10,000, 25,000, 50,000 people per university) with looser thresholds each step (works, citations,
 h-index), keeping anyone with a paper in the last `window_years` (10). Each record has
@@ -82,6 +80,15 @@ first and `metadata.budget_reached` turns on. When there are more than `search_i
 (100,000), `faculty_search.json` keeps only the most important of them and every university also gets
 `search/<institution id>.json` (listed as `search_file` in `universities.json`) with all of its rows,
 so the site loads one university's rows on demand. `metadata.json` records `search_index_complete`.
+
+## Vector search at scale (`vectors/`)
+
+`build_search_index.py` also writes an IVF index so the browser never needs every vector:
+`vectors/centroids.json` (`{k, dim, dtype: "int8", scale: 127, model, data}`, about sqrt(N) k-means
+centroids) and `vectors/<cluster>.json` (`{ids, institution_ids (parallel to ids), dim, dtype, scale, data}`). Embed the query, rank the
+centroids, load the nearest clusters, rank those exactly. `metadata.vectors` = `{k, dim, model, count}`.
+`embeddings/<institution id>.json` is written until `src/` mentions `vectors/centroids.json`, then dropped.
+Coverage beyond the first tier also waits until `src/` mentions both `record_file` and `vectors/centroids.json`.
 
 ## Role signals
 
