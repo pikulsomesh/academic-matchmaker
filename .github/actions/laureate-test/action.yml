@@ -1,0 +1,10 @@
+name: Laureate test
+description: Runs scripts/laureate_eval.py against public/data and writes laureate_eval.json
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v4
+      with:
+        node-version: 22
+    - shell: bash
+      run: python scripts/laureate_eval.py
