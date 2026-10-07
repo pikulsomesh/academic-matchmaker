@@ -1,0 +1,1016 @@
+{
+  "source": "QS World University Rankings 2026",
+  "source_url": "https://www.topuniversities.com/world-university-rankings/2026",
+  "notes": "Tied ranks share a number. openalex_id is filled in by initial_ingestion.py on first resolution; pin it here to override. directories lists optional faculty-directory pages to scrape for emails/titles (see scripts/README.md).",
+  "universities": [
+    {
+      "rank": 1,
+      "name": "Massachusetts Institute of Technology",
+      "country_code": "US",
+      "openalex_search": [
+        "Massachusetts Institute of Technology"
+      ],
+      "openalex_id": null,
+      "directories": []
+    },
+    {
+      "rank": 2,
+      "name": "Imperial College London",
+      "country_code": "GB",
+      "openalex_search": [
+        "Imperial College London"
+      ],
+      "openalex_id": null,
+      "directories": []
+    },
+    {
+      "rank": 3,
+      "name": "Stanford University",
+      "country_code": "US",
+      "openalex_search": [
+        "Stanford University"
+      ],
+      "openalex_id": null,
+      "directories": []
+    },
+    {
+      "rank": 4,
+      "name": "University of Oxford",
+      "country_code": "GB",
+      "openalex_search": [
+        "University of Oxford"
+      ],
+      "openalex_id": null,
+      "directories": []
+    },
+    {
+      "rank": 5,
+      "name": "Harvard University",
+      "country_code": "US",
+      "openalex_search": [
+        "Harvard University"
+      ],
+      "openalex_id": null,
+      "directories": []
+    },
+    {
+      "rank": 6,
+      "name": "University of Cambridge",
+      "country_code": "GB",
+      "openalex_search": [
+        "University of Cambridge"
+      ],
+      "openalex_id": null,
+      "directories": []
+    },
+    {
+      "rank": 7,
+      "name": "ETH Zurich",
+      "country_code": "CH",
+      "openalex_search": [
+        "ETH Zurich"
+      ],
+      "openalex_id": null,
+      "directories": []
+    },
+    {
+      "rank": 8,
+      "name": "National University of Singapore",
+      "country_code": "SG",
+      "openalex_search": [
+        "National University of Singapore"
+      ],
+      "openalex_id": null,
+      "directories": []
+    },
+    {
+      "rank": 9,
+      "name": "University College London",
+      "country_code": "GB",
+      "openalex_search": [
+        "University College London"
+      ],
+      "openalex_id": null,
+      "directories": []
+    },
+    {
+      "rank": 10,
+      "name": "California Institute of Technology",
+      "country_code": "US",
+      "openalex_search": [
+        "California Institute of Technology"
+      ],
+      "openalex_id": null,
+      "directories": []
+    },
+    {
+      "rank": 11,
+      "name": "The University of Hong Kong",
+      "country_code": "HK",
+      "openalex_search": [
+        "University of Hong Kong"
+      ],
+      "openalex_id": null,
+      "directories": []
+    },
+    {
+      "rank": 12,
+      "name": "Nanyang Technological University",
+      "country_code": "SG",
+      "openalex_search": [
+        "Nanyang Technological University"
+      ],
+      "openalex_id": null,
+      "directories": []
+    },
+    {
+      "rank": 13,
+      "name": "University of Chicago",
+      "country_code": "US",
+      "openalex_search": [
+        "University of Chicago"
+      ],
+      "openalex_id": null,
+      "directories": []
+    },
+    {
+      "rank": 14,
+      "name": "Peking University",
+      "country_code": "CN",
+      "openalex_search": [
+        "Peking University"
+      ],
+      "openalex_id": null,
+      "directories": []
+    },
+    {
+      "rank": 15,
+      "name": "University of Pennsylvania",
+      "country_code": "US",
+      "openalex_search": [
+        "University of Pennsylvania"
+      ],
+      "openalex_id": null,
+      "directories": []
+    },
+    {
+      "rank": 16,
+      "name": "Cornell University",
+      "country_code": "US",
+      "openalex_search": [
+        "Cornell University"
+      ],
+      "openalex_id": null,
+      "directories": []
+    },
+    {
+      "rank": 17,
+      "name": "Tsinghua University",
+      "country_code": "CN",
+      "openalex_search": [
+        "Tsinghua University"
+      ],
+      "openalex_id": null,
+      "directories": []
+    },
+    {
+      "rank": 17,
+      "name": "University of California, Berkeley",
+      "country_code": "US",
+      "openalex_search": [
+        "University of California, Berkeley"
+      ],
+      "openalex_id": null,
+      "directories": []
+    },
+    {
+      "rank": 19,
+      "name": "The University of Melbourne",
+      "country_code": "AU",
+      "openalex_search": [
+        "University of Melbourne"
+      ],
+      "openalex_id": null,
+      "directories": []
+    },
+    {
+      "rank": 20,
+      "name": "The University of New South Wales",
+      "country_code": "AU",
+      "openalex_search": [
+        "UNSW Sydney",
+        "University of New South Wales"
+      ],
+      "openalex_id": null,
+      "directories": []
+    },
+    {
+      "rank": 21,
+      "name": "Yale University",
+      "country_code": "US",
+      "openalex_search": [
+        "Yale University"
+      ],
+      "openalex_id": null,
+      "directories": []
+    },
+    {
+      "rank": 22,
+      "name": "EPFL",
+      "country_code": "CH",
+      "openalex_search": [
+        "École Polytechnique Fédérale de Lausanne",
+        "EPFL"
+      ],
+      "openalex_id": null,
+      "directories": []
+    },
+    {
+      "rank": 22,
+      "name": "Technical University of Munich",
+      "country_code": "DE",
+      "openalex_search": [
+        "Technical University of Munich"
+      ],
+      "openalex_id": null,
+      "directories": []
+    },
+    {
+      "rank": 24,
+      "name": "Johns Hopkins University",
+      "country_code": "US",
+      "openalex_search": [
+        "Johns Hopkins University"
+      ],
+      "openalex_id": null,
+      "directories": []
+    },
+    {
+      "rank": 25,
+      "name": "Princeton University",
+      "country_code": "US",
+      "openalex_search": [
+        "Princeton University"
+      ],
+      "openalex_id": null,
+      "directories": []
+    },
+    {
+      "rank": 25,
+      "name": "The University of Sydney",
+      "country_code": "AU",
+      "openalex_search": [
+        "University of Sydney"
+      ],
+      "openalex_id": null,
+      "directories": []
+    },
+    {
+      "rank": 27,
+      "name": "McGill University",
+      "country_code": "CA",
+      "openalex_search": [
+        "McGill University"
+      ],
+      "openalex_id": null,
+      "directories": []
+    },
+    {
+      "rank": 28,
+      "name": "Université PSL",
+      "country_code": "FR",
+      "openalex_search": [
+        "Université Paris Sciences et Lettres",
+        "PSL Research University"
+      ],
+      "openalex_id": null,
+      "directories": []
+    },
+    {
+      "rank": 29,
+      "name": "University of Toronto",
+      "country_code": "CA",
+      "openalex_search": [
+        "University of Toronto"
+      ],
+      "openalex_id": null,
+      "directories": []
+    },
+    {
+      "rank": 30,
+      "name": "Fudan University",
+      "country_code": "CN",
+      "openalex_search": [
+        "Fudan University"
+      ],
+      "openalex_id": null,
+      "directories": []
+    },
+    {
+      "rank": 31,
+      "name": "King's College London",
+      "country_code": "GB",
+      "openalex_search": [
+        "King's College London"
+      ],
+      "openalex_id": null,
+      "directories": []
+    },
+    {
+      "rank": 32,
+      "name": "Australian National University",
+      "country_code": "AU",
+      "openalex_search": [
+        "Australian National University"
+      ],
+      "openalex_id": null,
+      "directories": []
+    },
+    {
+      "rank": 32,
+      "name": "The Chinese University of Hong Kong",
+      "country_code": "HK",
+      "openalex_search": [
+        "Chinese University of Hong Kong"
+      ],
+      "openalex_id": null,
+      "directories": []
+    },
+    {
+      "rank": 34,
+      "name": "The University of Edinburgh",
+      "country_code": "GB",
+      "openalex_search": [
+        "University of Edinburgh"
+      ],
+      "openalex_id": null,
+      "directories": []
+    },
+    {
+      "rank": 35,
+      "name": "The University of Manchester",
+      "country_code": "GB",
+      "openalex_search": [
+        "University of Manchester"
+      ],
+      "openalex_id": null,
+      "directories": []
+    },
+    {
+      "rank": 36,
+      "name": "Monash University",
+      "country_code": "AU",
+      "openalex_search": [
+        "Monash University"
+      ],
+      "openalex_id": null,
+      "directories": []
+    },
+    {
+      "rank": 36,
+      "name": "The University of Tokyo",
+      "country_code": "JP",
+      "openalex_search": [
+        "University of Tokyo"
+      ],
+      "openalex_id": null,
+      "directories": []
+    },
+    {
+      "rank": 38,
+      "name": "Columbia University",
+      "country_code": "US",
+      "openalex_search": [
+        "Columbia University"
+      ],
+      "openalex_id": null,
+      "directories": []
+    },
+    {
+      "rank": 38,
+      "name": "Seoul National University",
+      "country_code": "KR",
+      "openalex_search": [
+        "Seoul National University"
+      ],
+      "openalex_id": null,
+      "directories": []
+    },
+    {
+      "rank": 40,
+      "name": "University of British Columbia",
+      "country_code": "CA",
+      "openalex_search": [
+        "University of British Columbia"
+      ],
+      "openalex_id": null,
+      "directories": []
+    },
+    {
+      "rank": 41,
+      "name": "Institut Polytechnique de Paris",
+      "country_code": "FR",
+      "openalex_search": [
+        "Institut Polytechnique de Paris"
+      ],
+      "openalex_id": null,
+      "directories": []
+    },
+    {
+      "rank": 42,
+      "name": "Northwestern University",
+      "country_code": "US",
+      "openalex_search": [
+        "Northwestern University"
+      ],
+      "openalex_id": null,
+      "directories": []
+    },
+    {
+      "rank": 42,
+      "name": "The University of Queensland",
+      "country_code": "AU",
+      "openalex_search": [
+        "University of Queensland"
+      ],
+      "openalex_id": null,
+      "directories": []
+    },
+    {
+      "rank": 44,
+      "name": "The Hong Kong University of Science and Technology",
+      "country_code": "HK",
+      "openalex_search": [
+        "Hong Kong University of Science and Technology"
+      ],
+      "openalex_id": null,
+      "directories": []
+    },
+    {
+      "rank": 45,
+      "name": "University of Michigan-Ann Arbor",
+      "country_code": "US",
+      "openalex_search": [
+        "University of Michigan–Ann Arbor",
+        "University of Michigan"
+      ],
+      "openalex_id": null,
+      "directories": []
+    },
+    {
+      "rank": 46,
+      "name": "University of California, Los Angeles",
+      "country_code": "US",
+      "openalex_search": [
+        "University of California, Los Angeles"
+      ],
+      "openalex_id": null,
+      "directories": []
+    },
+    {
+      "rank": 47,
+      "name": "Delft University of Technology",
+      "country_code": "NL",
+      "openalex_search": [
+        "Delft University of Technology"
+      ],
+      "openalex_id": null,
+      "directories": []
+    },
+    {
+      "rank": 47,
+      "name": "Shanghai Jiao Tong University",
+      "country_code": "CN",
+      "openalex_search": [
+        "Shanghai Jiao Tong University"
+      ],
+      "openalex_id": null,
+      "directories": []
+    },
+    {
+      "rank": 49,
+      "name": "Zhejiang University",
+      "country_code": "CN",
+      "openalex_search": [
+        "Zhejiang University"
+      ],
+      "openalex_id": null,
+      "directories": []
+    },
+    {
+      "rank": 50,
+      "name": "Yonsei University",
+      "country_code": "KR",
+      "openalex_search": [
+        "Yonsei University"
+      ],
+      "openalex_id": null,
+      "directories": []
+    },
+    {
+      "rank": 51,
+      "name": "University of Bristol",
+      "country_code": "GB",
+      "openalex_search": [
+        "University of Bristol"
+      ],
+      "openalex_id": null,
+      "directories": []
+    },
+    {
+      "rank": 52,
+      "name": "Carnegie Mellon University",
+      "country_code": "US",
+      "openalex_search": [
+        "Carnegie Mellon University"
+      ],
+      "openalex_id": null,
+      "directories": []
+    },
+    {
+      "rank": 53,
+      "name": "University of Amsterdam",
+      "country_code": "NL",
+      "openalex_search": [
+        "University of Amsterdam"
+      ],
+      "openalex_id": null,
+      "directories": []
+    },
+    {
+      "rank": 54,
+      "name": "The Hong Kong Polytechnic University",
+      "country_code": "HK",
+      "openalex_search": [
+        "Hong Kong Polytechnic University"
+      ],
+      "openalex_id": null,
+      "directories": []
+    },
+    {
+      "rank": 55,
+      "name": "New York University",
+      "country_code": "US",
+      "openalex_search": [
+        "New York University"
+      ],
+      "openalex_id": null,
+      "directories": []
+    },
+    {
+      "rank": 56,
+      "name": "The London School of Economics and Political Science",
+      "country_code": "GB",
+      "openalex_search": [
+        "London School of Economics and Political Science"
+      ],
+      "openalex_id": null,
+      "directories": []
+    },
+    {
+      "rank": 57,
+      "name": "Kyoto University",
+      "country_code": "JP",
+      "openalex_search": [
+        "Kyoto University"
+      ],
+      "openalex_id": null,
+      "directories": []
+    },
+    {
+      "rank": 58,
+      "name": "Ludwig-Maximilians-Universität München",
+      "country_code": "DE",
+      "openalex_search": [
+        "Ludwig-Maximilians-Universität München",
+        "LMU Munich"
+      ],
+      "openalex_id": null,
+      "directories": []
+    },
+    {
+      "rank": 58,
+      "name": "Universiti Malaya",
+      "country_code": "MY",
+      "openalex_search": [
+        "University of Malaya",
+        "Universiti Malaya"
+      ],
+      "openalex_id": null,
+      "directories": []
+    },
+    {
+      "rank": 60,
+      "name": "KU Leuven",
+      "country_code": "BE",
+      "openalex_search": [
+        "KU Leuven"
+      ],
+      "openalex_id": null,
+      "directories": []
+    },
+    {
+      "rank": 61,
+      "name": "Korea University",
+      "country_code": "KR",
+      "openalex_search": [
+        "Korea University"
+      ],
+      "openalex_id": null,
+      "directories": []
+    },
+    {
+      "rank": 62,
+      "name": "Duke University",
+      "country_code": "US",
+      "openalex_search": [
+        "Duke University"
+      ],
+      "openalex_id": null,
+      "directories": []
+    },
+    {
+      "rank": 63,
+      "name": "City University of Hong Kong",
+      "country_code": "HK",
+      "openalex_search": [
+        "City University of Hong Kong"
+      ],
+      "openalex_id": null,
+      "directories": []
+    },
+    {
+      "rank": 63,
+      "name": "National Taiwan University",
+      "country_code": "TW",
+      "openalex_search": [
+        "National Taiwan University"
+      ],
+      "openalex_id": null,
+      "directories": []
+    },
+    {
+      "rank": 65,
+      "name": "The University of Auckland",
+      "country_code": "NZ",
+      "openalex_search": [
+        "University of Auckland"
+      ],
+      "openalex_id": null,
+      "directories": []
+    },
+    {
+      "rank": 66,
+      "name": "University of California, San Diego",
+      "country_code": "US",
+      "openalex_search": [
+        "University of California, San Diego"
+      ],
+      "openalex_id": null,
+      "directories": []
+    },
+    {
+      "rank": 67,
+      "name": "King Fahd University of Petroleum and Minerals",
+      "country_code": "SA",
+      "openalex_search": [
+        "King Fahd University of Petroleum and Minerals"
+      ],
+      "openalex_id": null,
+      "directories": []
+    },
+    {
+      "rank": 68,
+      "name": "University of Texas at Austin",
+      "country_code": "US",
+      "openalex_search": [
+        "The University of Texas at Austin"
+      ],
+      "openalex_id": null,
+      "directories": []
+    },
+    {
+      "rank": 69,
+      "name": "Brown University",
+      "country_code": "US",
+      "openalex_search": [
+        "Brown University"
+      ],
+      "openalex_id": null,
+      "directories": []
+    },
+    {
+      "rank": 70,
+      "name": "University of Illinois Urbana-Champaign",
+      "country_code": "US",
+      "openalex_search": [
+        "University of Illinois Urbana-Champaign"
+      ],
+      "openalex_id": null,
+      "directories": []
+    },
+    {
+      "rank": 70,
+      "name": "Université Paris-Saclay",
+      "country_code": "FR",
+      "openalex_search": [
+        "Université Paris-Saclay"
+      ],
+      "openalex_id": null,
+      "directories": []
+    },
+    {
+      "rank": 72,
+      "name": "Lund University",
+      "country_code": "SE",
+      "openalex_search": [
+        "Lund University"
+      ],
+      "openalex_id": null,
+      "directories": []
+    },
+    {
+      "rank": 72,
+      "name": "Sorbonne University",
+      "country_code": "FR",
+      "openalex_search": [
+        "Sorbonne Université"
+      ],
+      "openalex_id": null,
+      "directories": []
+    },
+    {
+      "rank": 74,
+      "name": "The University of Warwick",
+      "country_code": "GB",
+      "openalex_search": [
+        "University of Warwick"
+      ],
+      "openalex_id": null,
+      "directories": []
+    },
+    {
+      "rank": 75,
+      "name": "Trinity College Dublin",
+      "country_code": "IE",
+      "openalex_search": [
+        "Trinity College Dublin"
+      ],
+      "openalex_id": null,
+      "directories": []
+    },
+    {
+      "rank": 76,
+      "name": "University of Birmingham",
+      "country_code": "GB",
+      "openalex_search": [
+        "University of Birmingham"
+      ],
+      "openalex_id": null,
+      "directories": []
+    },
+    {
+      "rank": 77,
+      "name": "The University of Western Australia",
+      "country_code": "AU",
+      "openalex_search": [
+        "University of Western Australia"
+      ],
+      "openalex_id": null,
+      "directories": []
+    },
+    {
+      "rank": 78,
+      "name": "KTH Royal Institute of Technology",
+      "country_code": "SE",
+      "openalex_search": [
+        "KTH Royal Institute of Technology"
+      ],
+      "openalex_id": null,
+      "directories": []
+    },
+    {
+      "rank": 79,
+      "name": "University of Glasgow",
+      "country_code": "GB",
+      "openalex_search": [
+        "University of Glasgow"
+      ],
+      "openalex_id": null,
+      "directories": []
+    },
+    {
+      "rank": 80,
+      "name": "Heidelberg University",
+      "country_code": "DE",
+      "openalex_search": [
+        "Universität Heidelberg",
+        "Heidelberg University"
+      ],
+      "openalex_id": null,
+      "directories": []
+    },
+    {
+      "rank": 81,
+      "name": "University of Washington",
+      "country_code": "US",
+      "openalex_search": [
+        "University of Washington"
+      ],
+      "openalex_id": null,
+      "directories": []
+    },
+    {
+      "rank": 82,
+      "name": "Adelaide University",
+      "country_code": "AU",
+      "openalex_search": [
+        "Adelaide University",
+        "University of Adelaide"
+      ],
+      "openalex_id": null,
+      "directories": []
+    },
+    {
+      "rank": 82,
+      "name": "Pennsylvania State University",
+      "country_code": "US",
+      "openalex_search": [
+        "Pennsylvania State University"
+      ],
+      "openalex_id": null,
+      "directories": []
+    },
+    {
+      "rank": 84,
+      "name": "Universidad de Buenos Aires",
+      "country_code": "AR",
+      "openalex_search": [
+        "University of Buenos Aires"
+      ],
+      "openalex_id": null,
+      "directories": []
+    },
+    {
+      "rank": 85,
+      "name": "Institute of Science Tokyo",
+      "country_code": "JP",
+      "openalex_search": [
+        "Institute of Science Tokyo",
+        "Tokyo Institute of Technology"
+      ],
+      "openalex_id": null,
+      "directories": []
+    },
+    {
+      "rank": 86,
+      "name": "University of Leeds",
+      "country_code": "GB",
+      "openalex_search": [
+        "University of Leeds"
+      ],
+      "openalex_id": null,
+      "directories": []
+    },
+    {
+      "rank": 87,
+      "name": "University of Southampton",
+      "country_code": "GB",
+      "openalex_search": [
+        "University of Southampton"
+      ],
+      "openalex_id": null,
+      "directories": []
+    },
+    {
+      "rank": 88,
+      "name": "Boston University",
+      "country_code": "US",
+      "openalex_search": [
+        "Boston University"
+      ],
+      "openalex_id": null,
+      "directories": []
+    },
+    {
+      "rank": 88,
+      "name": "Freie Universität Berlin",
+      "country_code": "DE",
+      "openalex_search": [
+        "Freie Universität Berlin"
+      ],
+      "openalex_id": null,
+      "directories": []
+    },
+    {
+      "rank": 88,
+      "name": "Purdue University",
+      "country_code": "US",
+      "openalex_search": [
+        "Purdue University West Lafayette"
+      ],
+      "openalex_id": null,
+      "directories": []
+    },
+    {
+      "rank": 91,
+      "name": "Osaka University",
+      "country_code": "JP",
+      "openalex_search": [
+        "Osaka University"
+      ],
+      "openalex_id": null,
+      "directories": []
+    },
+    {
+      "rank": 92,
+      "name": "The University of Sheffield",
+      "country_code": "GB",
+      "openalex_search": [
+        "University of Sheffield"
+      ],
+      "openalex_id": null,
+      "directories": []
+    },
+    {
+      "rank": 93,
+      "name": "Uppsala University",
+      "country_code": "SE",
+      "openalex_search": [
+        "Uppsala University"
+      ],
+      "openalex_id": null,
+      "directories": []
+    },
+    {
+      "rank": 94,
+      "name": "Durham University",
+      "country_code": "GB",
+      "openalex_search": [
+        "Durham University"
+      ],
+      "openalex_id": null,
+      "directories": []
+    },
+    {
+      "rank": 94,
+      "name": "University of Alberta",
+      "country_code": "CA",
+      "openalex_search": [
+        "University of Alberta"
+      ],
+      "openalex_id": null,
+      "directories": []
+    },
+    {
+      "rank": 96,
+      "name": "University of Technology Sydney",
+      "country_code": "AU",
+      "openalex_search": [
+        "University of Technology Sydney"
+      ],
+      "openalex_id": null,
+      "directories": []
+    },
+    {
+      "rank": 97,
+      "name": "University of Nottingham",
+      "country_code": "GB",
+      "openalex_search": [
+        "University of Nottingham"
+      ],
+      "openalex_id": null,
+      "directories": []
+    },
+    {
+      "rank": 98,
+      "name": "Karlsruhe Institute of Technology",
+      "country_code": "DE",
+      "openalex_search": [
+        "Karlsruhe Institute of Technology"
+      ],
+      "openalex_id": null,
+      "directories": []
+    },
+    {
+      "rank": 98,
+      "name": "Politecnico di Milano",
+      "country_code": "IT",
+      "openalex_search": [
+        "Politecnico di Milano"
+      ],
+      "openalex_id": null,
+      "directories": []
+    },
+    {
+      "rank": 100,
+      "name": "University of Zurich",
+      "country_code": "CH",
+      "openalex_search": [
+        "University of Zurich"
+      ],
+      "openalex_id": null,
+      "directories": []
+    }
+  ]
+}
