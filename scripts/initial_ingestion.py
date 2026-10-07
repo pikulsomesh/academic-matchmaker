@@ -33,7 +33,7 @@ import requests
 import contacts
 from faculty import (AUTHOR_SELECT, DATA_DIR, MAX_RECENT_PUBLICATIONS, WORK_SELECT, compute_domains,
                      contact_flags, merge_publications, now_iso, publication_entry, read_json, today_iso,
-                     verification_rank, write_json, write_records)
+                     verification_rank, write_json, write_records, last_publication_year)
 from openalex import OpenAlexClient, RateLimiter, chunks, short_id
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -116,13 +116,13 @@ def institution_domains(uni, inst):
 
 # --- step 2: authors -------------------------------------------------------------------
 
-def is_active(author, years=3):
+def is_active(author, years=10):
     cutoff = date.today().year - years
     return sum(c.get("works_count", 0) for c in author.get("counts_by_year") or [] if c.get("year", 0) >= cutoff) > 0
 
 
 def fetch_authors(client, cache, inst_id, args):
-    key = f"{inst_id}|{args.min_works}|{args.min_citations}|{args.per_institution}"
+    key = f"{inst_id}|{args.min_works}|{args.min_citations}|{args.min_h_index}|{args.window_years}|{args.per_institution}"
     cached = cache.get("authors", key)
     if cached is not None:
         return cached
@@ -134,7 +134,7 @@ def fetch_authors(client, cache, inst_id, args):
     authors = []
     # Over-fetch so that filtering out inactive / low h-index authors still fills the quota.
     for author in client.iterate("authors", params, max_results=args.per_institution * 2):
-        if (author.get("summary_stats") or {}).get("h_index", 0) < args.min_h_index or not is_active(author):
+        if (author.get("summary_stats") or {}).get("h_index", 0) < args.min_h_index or not is_active(author, args.window_years):
             continue
         authors.append(author)
         if len(authors) >= args.per_institution:
@@ -326,6 +326,7 @@ def build_record(author, uni, inst, recent, found):
         "orcid": author.get("orcid"),
         "recent_publications": merge_publications([], recent),
         "profile_source": found["profile_source"],
+        "last_publication_year": last_publication_year(author),
     }
     record["flags"] = contact_flags(record)
     return record
@@ -341,6 +342,12 @@ def parse_args(argv=None):
     p.add_argument("--min-works", type=int, default=20)
     p.add_argument("--min-citations", type=int, default=500)
     p.add_argument("--min-h-index", type=int, default=10)
+    p.add_argument("--window-years", type=int, default=10,
+                   help="keep people with at least one paper in this many recent years")
+    p.add_argument("--size-budget-mb", type=float, default=None,
+                   help="shrink the data to this estimated size, dropping the least important people first")
+    p.add_argument("--search-index-rows", type=int, default=None,
+                   help="faculty_search.json keeps only this many people; search/<id>.json holds everyone")
     p.add_argument("--require-contact", action="store_true",
                    help="drop records with neither an email nor an institutional profile link")
     p.add_argument("--skip-orcid", action="store_true")
@@ -433,7 +440,9 @@ def build(args, client=None, web=None):
         unique.setdefault(record["id"], record)
     records = sorted(unique.values(), key=lambda r: (verification_rank(r), r["institution"]["rank"], -r["citation_count"]))
 
-    write_records(records, universities, args.out_dir)
+    stats = write_records(records, universities, args.out_dir,
+                          budget_bytes=int(args.size_budget_mb * 1e6) if args.size_budget_mb else None,
+                          search_index_rows=args.search_index_rows)
     with_email = sum(1 for r in records if r["email"])
     write_json(os.path.join(args.out_dir, "metadata.json"), {
         "generated_at": now_iso(),
@@ -442,6 +451,11 @@ def build(args, client=None, web=None):
         "ranking_source": config.get("source"),
         "faculty_count": len(records),
         "per_institution": args.per_institution,
+        "window_years": args.window_years,
+        "budget_reached": stats["pruned"] > 0,
+        "pruned_for_size": stats["pruned"],
+        "search_index_rows": stats["search_index_rows"],
+        "search_index_complete": stats["search_index_complete"],
         "faculty_with_email": with_email,
         "institution_count": len(universities),
         "openalex_requests": client.request_count,

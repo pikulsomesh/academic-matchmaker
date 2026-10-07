@@ -44,9 +44,24 @@ def site_reads_shards(src_dir=SRC_DIR):
     return False
 
 
+def tier_sizes(coverage):
+    sizes = sorted({int(t["per_institution"]) for t in coverage.get("tiers") or []})
+    return sizes or [int(coverage.get("target_per_institution", 200))]
+
+
+def tier_for(coverage, per_institution):
+    """Thresholds for a build of this size: the largest tier not above it (the first tier for small manual runs)."""
+    tiers = sorted(coverage.get("tiers") or [], key=lambda t: t["per_institution"])
+    chosen = tiers[0] if tiers else {}
+    for tier in tiers:
+        if tier["per_institution"] <= per_institution:
+            chosen = tier
+    return chosen
+
+
 def plan(event, schedule, mode_input, per_institution_input, metadata, coverage, shards_ready):
     """-> (mode, per_institution, reason). mode is 'full', 'cdc' or 'skip'."""
-    target = int(coverage.get("target_per_institution", 200))
+    target = tier_sizes(coverage)[-1]
     if event == "workflow_dispatch":
         mode = mode_input or "cdc"
         return mode, int(per_institution_input or 200), f"manual {mode} run"
@@ -57,11 +72,14 @@ def plan(event, schedule, mode_input, per_institution_input, metadata, coverage,
         initial = int(coverage.get("initial_per_institution", 200))
         return "full", initial, f"first full build at {initial} per institution"
     built = int(metadata.get("per_institution") or 200)
-    if built >= target:
-        return "skip", target, f"index already built at {built} per institution"
+    if metadata.get("budget_reached"):
+        return "skip", built, "size budget reached; coverage stops growing"
+    bigger = [size for size in tier_sizes(coverage) if size > built]
+    if not bigger:
+        return "skip", built, f"index already built at {built} per institution"
     if not shards_ready:
-        return "skip", target, "waiting for the website to read per-university files"
-    return "full", target, f"expanding coverage from {built} to {target} per institution"
+        return "skip", bigger[0], "waiting for the website to read per-university files"
+    return "full", bigger[0], f"expanding coverage from {built} to {bigger[0]} per institution"
 
 
 def main(argv=None):
@@ -79,7 +97,13 @@ def main(argv=None):
     )
     print(f"Plan: {mode} ({reason})", file=sys.stderr)
     out = os.environ.get("GITHUB_OUTPUT")
-    lines = f"mode={mode}\nper_institution={per_institution}\n"
+    coverage = read_json(COVERAGE_CONFIG)
+    tier = tier_for(coverage, per_institution)
+    lines = (f"mode={mode}\nper_institution={per_institution}\n"
+             f"min_works={tier.get('min_works', 20)}\nmin_citations={tier.get('min_citations', 500)}\n"
+             f"min_h_index={tier.get('min_h_index', 10)}\nwindow_years={coverage.get('window_years', 10)}\n"
+             f"size_budget_mb={coverage.get('size_budget_mb', 800)}\n"
+             f"search_index_rows={coverage.get('search_index_rows', 100000)}\n")
     if out:
         with open(out, "a", encoding="utf-8") as fh:
             fh.write(lines)

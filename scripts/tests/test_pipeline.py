@@ -146,6 +146,63 @@ class PlanTests(unittest.TestCase):
             shutil.rmtree(d)
 
 
+class TierTests(unittest.TestCase):
+    COVERAGE = {"initial_per_institution": 1000, "tiers": [
+        {"per_institution": 1000, "min_works": 20}, {"per_institution": 3000, "min_works": 10},
+        {"per_institution": 10000, "min_works": 5}]}
+
+    def plan(self, built, **extra):
+        meta = {"last_ingestion": "x", "per_institution": built, **extra}
+        return plan_run.plan("schedule", "0 2 * * *", "", "", meta, self.COVERAGE, True)[:2]
+
+    def test_steps_up_one_tier_a_day(self):
+        self.assertEqual(self.plan(1000), ("full", 3000))
+        self.assertEqual(self.plan(3000), ("full", 10000))
+        self.assertEqual(self.plan(10000)[0], "skip")
+        self.assertEqual(plan_run.plan("schedule", "0 2 * * *", "", "", {}, self.COVERAGE, True)[:2], ("full", 1000))
+
+    def test_stops_when_size_budget_reached(self):
+        self.assertEqual(self.plan(3000, budget_reached=True)[0], "skip")
+
+    def test_thresholds_follow_the_tier(self):
+        self.assertEqual(plan_run.tier_for(self.COVERAGE, 3000)["min_works"], 10)
+        self.assertEqual(plan_run.tier_for(self.COVERAGE, 200)["min_works"], 20)
+
+
+class SizeAndIndexTests(unittest.TestCase):
+    def records(self, n):
+        return [{"id": f"A{i}", "name": f"P{i}", "title": None, "email": None, "profile_url": None,
+                 "institution": {"id": "I1", "rank": 1}, "primary_domain": "X", "domain_weights": {"X": 1.0},
+                 "citation_count": i * 10, "h_index": i, "works_count": 50 + i, "recent_publications": []}
+                for i in range(n)]
+
+    def test_prunes_least_important_to_fit(self):
+        recs = self.records(50)
+        cost = faculty.estimated_bytes(recs[0])
+        kept, dropped = faculty.prune_to_budget(recs, cost * 20)
+        self.assertEqual(len(kept) + dropped, 50)
+        self.assertLessEqual(len(kept), 21)
+        self.assertIn("A49", {r["id"] for r in kept})
+        self.assertNotIn("A0", {r["id"] for r in kept})
+
+    def test_truncated_search_index_and_university_files(self):
+        d = tempfile.mkdtemp()
+        try:
+            unis = [{"id": "I1", "name": "U", "country_code": "US", "rank": 1}]
+            stats = faculty.write_records(self.records(30), unis, d, search_index_rows=10)
+            self.assertFalse(stats["search_index_complete"])
+            top = json.load(open(os.path.join(d, "faculty_search.json")))
+            self.assertEqual(len(top), 10)
+            self.assertEqual(json.load(open(os.path.join(d, "universities.json")))[0]["search_file"], "search/I1.json")
+            self.assertEqual(len(json.load(open(os.path.join(d, "search", "I1.json")))), 30)
+            stats = faculty.write_records(self.records(30), unis, d, search_index_rows=100)
+            self.assertTrue(stats["search_index_complete"])
+            self.assertFalse(os.path.exists(os.path.join(d, "search")))
+            self.assertNotIn("search_file", json.load(open(os.path.join(d, "universities.json")))[0])
+        finally:
+            shutil.rmtree(d)
+
+
 class PauseTests(unittest.TestCase):
     def test_time_budget_pauses_with_exit_75(self):
         tmp = tempfile.mkdtemp()
@@ -366,7 +423,7 @@ class PipelineTests(unittest.TestCase):
         row = self.read("faculty_search.json")[0]
         self.assertEqual(set(row), {"id", "name", "title", "institution_id", "primary_domain", "domains",
                                     "citation_count", "email", "profile_url", "has_email", "seniority_score",
-                                "first_author_recent", "last_author_recent", "recent_works"})
+                                "first_author_recent", "last_author_recent", "recent_works", "last_publication_year"})
         # Shard embeddings equal the matching rows of the combined file.
         combined = self.read("faculty_embeddings.json")
         self.assertEqual(self.read(uni["embeddings_file"])["data"], combined["data"])

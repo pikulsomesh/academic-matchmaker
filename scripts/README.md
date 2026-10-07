@@ -67,6 +67,18 @@ verified ones. `--require-contact` drops records with neither an email nor an in
   the index has at most 30,000 records (`COMBINED_LIMIT` in `faculty.py`) and deleted above that,
   since one file that large is too slow for the browser.
 
+## Growing the database
+
+`config/coverage.json` holds the plan. Each daily run builds the next tier in `tiers` (1,000, 3,000,
+10,000, 25,000, 50,000 people per university) with looser thresholds each step (works, citations,
+h-index), keeping anyone with a paper in the last `window_years` (10). Each record has
+`last_publication_year`. Growth stops by itself when the data would pass `size_budget_mb` (800, under
+GitHub Pages' 1 GB): the least important people (lowest `seniority_score`, then citations) are dropped
+first and `metadata.budget_reached` turns on. When there are more than `search_index_rows` people
+(100,000), `faculty_search.json` keeps only the most important of them and every university also gets
+`search/<institution id>.json` (listed as `search_file` in `universities.json`) with all of its rows,
+so the site loads one university's rows on demand. `metadata.json` records `search_index_complete`.
+
 ## Role signals
 
 OpenAlex affiliations include students and staff, so every record is a *researcher*, with a rough

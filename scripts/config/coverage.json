@@ -1,4 +1,39 @@
 {
   "initial_per_institution": 1000,
-  "target_per_institution": 1000
+  "target_per_institution": 50000,
+  "window_years": 10,
+  "size_budget_mb": 800,
+  "search_index_rows": 100000,
+  "tiers": [
+    {
+      "per_institution": 1000,
+      "min_works": 20,
+      "min_citations": 500,
+      "min_h_index": 10
+    },
+    {
+      "per_institution": 3000,
+      "min_works": 10,
+      "min_citations": 100,
+      "min_h_index": 5
+    },
+    {
+      "per_institution": 10000,
+      "min_works": 5,
+      "min_citations": 20,
+      "min_h_index": 3
+    },
+    {
+      "per_institution": 25000,
+      "min_works": 3,
+      "min_citations": 5,
+      "min_h_index": 1
+    },
+    {
+      "per_institution": 50000,
+      "min_works": 2,
+      "min_citations": 1,
+      "min_h_index": 1
+    }
+  ]
 }
