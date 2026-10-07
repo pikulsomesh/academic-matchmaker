@@ -1,7 +1,8 @@
 import { BookOpen, ExternalLink, Mail, MapPin, Quote } from 'lucide-react'
-import { countryName, formatCount, sortedWeights } from '../lib/format.js'
+import { countryName, formatCount } from '../lib/format.js'
 
-export function ContactLinks({ faculty, size = 'sm' }) {
+// `onShowEmail` opens the full record when the catalog row only says an email exists.
+export function ContactLinks({ faculty, size = 'sm', onShowEmail }) {
   const base =
     size === 'lg'
       ? 'flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition'
@@ -19,9 +20,20 @@ export function ContactLinks({ faculty, size = 'sm' }) {
           <Mail className="h-4 w-4 shrink-0" />
           <span className="truncate">{faculty.email}</span>
         </a>
+      ) : faculty.has_email && onShowEmail ? (
+        <button
+          type="button"
+          onClick={(e) => {
+            stop(e)
+            onShowEmail()
+          }}
+          className={`${base} bg-cardinal text-white hover:bg-cardinal/90`}
+        >
+          <Mail className="h-4 w-4 shrink-0" /> Show email
+        </button>
       ) : (
         <span className={`${base} border border-dashed border-gray-200 text-mit-gray`}>
-          <Mail className="h-4 w-4 shrink-0" /> Email not verified
+          <Mail className="h-4 w-4 shrink-0" /> {faculty.has_email ? 'Loading email…' : 'Email not verified'}
         </span>
       )}
       {faculty.profile_url ? (
@@ -45,7 +57,7 @@ export function ContactLinks({ faculty, size = 'sm' }) {
 
 export default function FacultyCard({ faculty, onSelect, matchScore }) {
   const inst = faculty.institution ?? {}
-  const domains = sortedWeights(faculty.domain_weights).slice(0, 3)
+  const domains = (faculty.domains ?? []).slice(0, 3)
   const latest = faculty.recent_publications?.[0]
 
   return (
@@ -93,7 +105,7 @@ export default function FacultyCard({ faculty, onSelect, matchScore }) {
 
       {domains.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
-          {domains.map(([name]) => (
+          {domains.map((name) => (
             <span
               key={name}
               className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${
@@ -117,7 +129,7 @@ export default function FacultyCard({ faculty, onSelect, matchScore }) {
       )}
 
       <div className="mt-auto border-t border-gray-100 pt-4">
-        <ContactLinks faculty={faculty} />
+        <ContactLinks faculty={faculty} onShowEmail={onSelect} />
       </div>
     </article>
   )

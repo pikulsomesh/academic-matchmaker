@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { FACULTY_EMBEDDINGS_PATH } from '../ai/config.js'
+import { cachedRecords, loadEmbeddings } from '../data/facultyStore.js'
 import { documentKind, extractDocumentText } from '../ai/documentText.js'
 import {
   EMPTY_PROFILE,
@@ -10,14 +10,16 @@ import {
   parseModelProfile,
   topicsFromText,
 } from '../ai/profile.js'
-import { decodeEmbeddingIndex, facultyEmbeddingText, profileEmbeddingText, rankByCosine } from '../ai/vectors.js'
+import { facultyEmbeddingText, profileEmbeddingText, rankIndexes } from '../ai/vectors.js'
 
 // In-browser matching: Qwen2.5-0.5B-Instruct reads uploads and chat messages
 // into an interest profile, MiniLM embeds it, and faculty are ranked by cosine
 // similarity. Nothing leaves the browser except model downloads from the
 // Hugging Face Hub (cached by the browser after the first visit).
 //
-// const ai = useLocalAI(faculty)
+// const ai = useLocalAI(faculty, { institutionIds })
+//   faculty           catalog rows (useFacultySearch().faculty); matches point at these
+//   institutionIds    universities whose embedding shards to rank against, null = all
 //   ai.profile        { interests: string[], summary: string }
 //   ai.matches        [{ faculty, score }] best first, [] until a profile exists
 //   ai.messages       chat transcript [{ role: 'user' | 'assistant', content }]
@@ -69,26 +71,30 @@ async function embedTexts(texts, onProgress) {
   return callWorker({ type: 'embed', texts }, onProgress)
 }
 
-// Precomputed vectors from the data pipeline, or embeddings computed here
-// for the loaded faculty when that file isn't published yet.
-async function loadFacultyIndex(faculty, onProgress) {
+// Ranking keeps only the best matches; the results list shows these.
+const MAX_MATCHES = 1000
+
+// Precomputed vectors from the data pipeline (one shard per university, or
+// the single faculty_embeddings.json), or embeddings computed here for the
+// full records in memory when neither is published.
+async function loadFacultyIndex(faculty, institutionIds, { onShards, onEmbed }) {
+  const known = new Set(faculty.map((f) => f.id))
   try {
-    const res = await fetch(`${import.meta.env.BASE_URL}${FACULTY_EMBEDDINGS_PATH}`)
-    if (res.ok && res.headers.get('content-type')?.includes('json')) {
-      const index = decodeEmbeddingIndex(await res.json())
-      const known = new Set(faculty.map((f) => f.id))
-      if (index.ids.some((id) => known.has(id))) return index
-    }
+    const shards = await loadEmbeddings(institutionIds, onShards)
+    if (shards && institutionIds && !shards.length) return []
+    if (shards?.some((s) => s.ids.some((id) => known.has(id)))) return shards
   } catch (err) {
     console.warn('Precomputed faculty embeddings unavailable, embedding in the browser.', err)
   }
-  const matrix = await embedTexts(faculty.map(facultyEmbeddingText), onProgress)
-  return { ids: faculty.map((f) => f.id), dim: matrix.length / Math.max(faculty.length, 1), matrix }
+  const records = cachedRecords(faculty.map((f) => f.id))
+  if (!records.length) throw new Error('Faculty vectors are not published yet.')
+  const matrix = await embedTexts(records.map(facultyEmbeddingText), onEmbed)
+  return [{ ids: records.map((f) => f.id), dim: matrix.length / records.length, matrix }]
 }
 
 const NO_FACULTY = []
 
-export default function useLocalAI(faculty = NO_FACULTY) {
+export default function useLocalAI(faculty = NO_FACULTY, { institutionIds = null } = {}) {
   const [profile, setProfile] = useState(EMPTY_PROFILE)
   const [sources, setSources] = useState([])
   const [messages, setMessages] = useState([])
@@ -115,6 +121,7 @@ export default function useLocalAI(faculty = NO_FACULTY) {
   useEffect(() => {
     indexRef.current = null
   }, [faculty])
+  const scopeKey = institutionIds ? [...institutionIds].sort().join(',') : '*'
 
   // Tasks can overlap (re-ranking while a document is read), so busy clears
   // only when the last one finishes.
@@ -222,18 +229,21 @@ export default function useLocalAI(faculty = NO_FACULTY) {
     }
     let cancelled = false
     run('Matching faculty…', async () => {
-      if (!indexRef.current) {
-        indexRef.current = await loadFacultyIndex(faculty, ({ done, total }) =>
-          setBusy(`Indexing faculty ${done}/${total}…`),
-        )
+      if (indexRef.current?.key !== scopeKey) {
+        const shards = await loadFacultyIndex(faculty, institutionIds, {
+          onShards: ({ done, total }) => setBusy(`Loading faculty vectors ${done}/${total}…`),
+          onEmbed: ({ done, total }) => setBusy(`Indexing faculty ${done}/${total}…`),
+        })
+        indexRef.current = { key: scopeKey, shards }
       }
       const query = await embedTexts([queryText])
-      if (!cancelled) setRanked(rankByCosine(query, indexRef.current))
+      if (!cancelled) setRanked(rankIndexes(query, indexRef.current.shards, MAX_MATCHES))
     })
     return () => {
       cancelled = true
     }
-  }, [queryText, faculty, run])
+    // institutionIds is read through scopeKey so a new array with the same ids doesn't re-rank.
+  }, [queryText, faculty, scopeKey, run])
 
   const matches = useMemo(() => {
     const byId = new Map(faculty.map((f) => [f.id, f]))

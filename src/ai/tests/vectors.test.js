@@ -67,3 +67,29 @@ test('cosineSimilarity', () => {
   assert.ok(Math.abs(cosineSimilarity([1, 1], [2, 2]) - 1) < 1e-9)
   assert.equal(cosineSimilarity([0, 0], [1, 1]), 0)
 })
+
+test('int8 shards rank like decoded float indexes, across several shards', async () => {
+  const { decodeEmbeddingShard, rankIndexes } = await import('../vectors.js')
+  const mixed = (a, b) => {
+    const v = new Float32Array(DIM)
+    v[a] = 0.8
+    v[b] = 0.6
+    return v
+  }
+  const a = indexJson([unit(0), mixed(1, 0)], 'int8')
+  const b = indexJson([mixed(0, 2), unit(3)], 'int8')
+  b.ids = ['G0', 'G1']
+  const shards = [decodeEmbeddingShard(a), decodeEmbeddingShard(b)]
+  assert.ok(shards[0].int8 instanceof Int8Array)
+
+  const ranked = rankIndexes(unit(0), shards)
+  assert.deepEqual(ranked.map((r) => r.id), ['F0', 'G0', 'F1', 'G1'])
+  assert.ok(Math.abs(ranked[0].score - 1) < 1e-6)
+  assert.ok(Math.abs(ranked[1].score - 0.8) < 0.01)
+
+  const float = decodeEmbeddingIndex(a)
+  const viaFloat = rankByCosine(unit(1), float)
+  const viaShard = rankIndexes(unit(1), [shards[0]])
+  viaFloat.forEach((r, i) => assert.ok(Math.abs(r.score - viaShard[i].score) < 1e-5))
+  assert.equal(rankIndexes(unit(0), shards, 2).length, 2)
+})

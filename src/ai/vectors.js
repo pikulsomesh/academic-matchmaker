@@ -107,3 +107,47 @@ export function rankByCosine(query, { ids, dim, matrix }, limit = Infinity) {
   scored.sort((a, b) => b.score - a.score)
   return scored.slice(0, limit)
 }
+
+// Decodes one embeddings file (a per-university shard or the combined file)
+// for large indexes: int8 rows stay as an Int8Array with a per-row inverse norm
+// instead of being expanded to Float32 unit vectors, which keeps 100k faculty
+// at ~40 MB of memory instead of ~150 MB. float32 files decode as before.
+export function decodeEmbeddingShard(json) {
+  if (json.dtype !== 'int8') return decodeEmbeddingIndex(json)
+  const { ids, dim, data } = json
+  if (json.model && json.model !== EMBEDDING_MODEL) {
+    throw new Error(`Faculty embeddings use ${json.model}, expected ${EMBEDDING_MODEL}`)
+  }
+  if (dim !== EMBEDDING_DIM) throw new Error(`Expected ${EMBEDDING_DIM}-dim embeddings, got ${dim}`)
+  const bytes = base64ToBytes(data)
+  const int8 = new Int8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+  if (int8.length !== ids.length * dim) {
+    throw new Error(`Embedding data has ${int8.length} values, expected ${ids.length * dim}`)
+  }
+  const invNorm = new Float32Array(ids.length)
+  for (let r = 0; r < ids.length; r++) {
+    let sum = 0
+    for (let i = r * dim, end = i + dim; i < end; i++) sum += int8[i] * int8[i]
+    invNorm[r] = sum ? 1 / Math.sqrt(sum) : 0
+  }
+  return { ids, dim, int8, invNorm }
+}
+
+// rankByCosine across several decoded indexes (float matrices from
+// decodeEmbeddingIndex or int8 shards from decodeEmbeddingShard).
+export function rankIndexes(query, indexes, limit = Infinity) {
+  const q = normalize(query)
+  const scored = []
+  for (const index of indexes) {
+    const { ids, dim } = index
+    const values = index.matrix ?? index.int8
+    for (let r = 0; r < ids.length; r++) {
+      let dot = 0
+      const offset = r * dim
+      for (let i = 0; i < dim; i++) dot += q[i] * values[offset + i]
+      scored.push({ id: ids[r], score: index.matrix ? dot : dot * index.invNorm[r] })
+    }
+  }
+  scored.sort((a, b) => b.score - a.score)
+  return scored.slice(0, limit)
+}
