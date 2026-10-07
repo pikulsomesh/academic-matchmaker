@@ -1,0 +1,74 @@
+[
+  {
+    "id": "SAMPLE0001",
+    "name": "Dr. Sample Faculty One",
+    "title": "Associate Professor of Materials & Computer Science",
+    "email": "sample.one@example.edu",
+    "profile_url": "https://example.edu/faculty/sample-one",
+    "institution": {
+      "name": "Massachusetts Institute of Technology",
+      "country_code": "US",
+      "rank": 1
+    },
+    "primary_domain": "Materials Science",
+    "domain_weights": {
+      "Artificial Intelligence": 0.45,
+      "Materials Science": 0.35
+    },
+    "citation_count": 5200,
+    "recent_publications": [
+      {
+        "title": "Sample: Autonomous Discovery of Battery Electrolytes",
+        "year": 2026
+      }
+    ]
+  },
+  {
+    "id": "SAMPLE0002",
+    "name": "Dr. Sample Faculty Two",
+    "title": "Professor of Computational Biology",
+    "email": "sample.two@example.edu",
+    "profile_url": "https://example.edu/faculty/sample-two",
+    "institution": {
+      "name": "University of Oxford",
+      "country_code": "GB",
+      "rank": 4
+    },
+    "primary_domain": "Computational Biology",
+    "domain_weights": {
+      "Computational Biology": 0.6,
+      "Artificial Intelligence": 0.3
+    },
+    "citation_count": 8100,
+    "recent_publications": [
+      {
+        "title": "Sample: Protein Language Models for Enzyme Design",
+        "year": 2025
+      }
+    ]
+  },
+  {
+    "id": "SAMPLE0003",
+    "name": "Dr. Sample Faculty Three",
+    "title": "Assistant Professor of Economics",
+    "email": "sample.three@example.edu",
+    "profile_url": "https://example.edu/faculty/sample-three",
+    "institution": {
+      "name": "National University of Singapore",
+      "country_code": "SG",
+      "rank": 8
+    },
+    "primary_domain": "Economics",
+    "domain_weights": {
+      "Economics": 0.7,
+      "Artificial Intelligence": 0.2
+    },
+    "citation_count": 1300,
+    "recent_publications": [
+      {
+        "title": "Sample: Machine Learning for Labour Market Forecasting",
+        "year": 2026
+      }
+    ]
+  }
+]
