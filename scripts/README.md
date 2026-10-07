@@ -14,8 +14,10 @@ Run it by hand from the Actions tab with **mode = full** to do the first full in
 (a full run of 100 institutions takes a few hours; if it hits the job time limit, re-run it
 and it resumes from its cache).
 
-Optional repository settings: variable `OPENALEX_MAILTO` (your email, for OpenAlex's polite
-pool) and secret `OPENALEX_API_KEY`.
+Set the repository secret `OPENALEX_API_KEY` (free at openalex.org/settings/api). OpenAlex bills
+per request: without a key the daily budget is about 1,000 list calls, with a free key about
+10,000. A full build uses roughly 3,000 to 4,000 calls and a monthly update roughly 1,000 to 1,500.
+If the budget runs out mid-run, re-run the next day and it resumes from the cache.
 
 ## Where the data comes from
 
