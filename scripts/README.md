@@ -71,6 +71,8 @@ verified ones. `--require-contact` drops records with neither an email nor an in
 
 ## Growing the database
 
+`scrape_profiles` in `config/coverage.json` (false for now) turns the slow profile-page and directory lookups off in bulk builds; ORCID emails are still checked. A full build takes about 3 hours instead of about 20.
+
 `config/coverage.json` holds the plan. Each daily run builds the next tier in `tiers` (1,000, 3,000,
 10,000, 25,000, 50,000 people per university) with looser thresholds each step (works, citations,
 h-index), keeping anyone with a paper in the last `window_years` (10). Each record has

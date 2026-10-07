@@ -117,6 +117,7 @@ def main(argv=None):
              f"min_works={tier.get('min_works', 20)}\nmin_citations={tier.get('min_citations', 500)}\n"
              f"min_h_index={tier.get('min_h_index', 10)}\nwindow_years={coverage.get('window_years', 10)}\n"
              f"size_budget_mb={coverage.get('size_budget_mb', 800)}\n"
+             f"skip_scrape={'false' if coverage.get('scrape_profiles', True) else 'true'}\n"
              f"search_index_rows={coverage.get('search_index_rows', 100000)}\n")
     if out:
         with open(out, "a", encoding="utf-8") as fh:

@@ -35,5 +35,6 @@
       "min_citations": 1,
       "min_h_index": 1
     }
-  ]
+  ],
+  "scrape_profiles": false
 }

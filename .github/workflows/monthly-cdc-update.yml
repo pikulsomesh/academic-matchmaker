@@ -81,6 +81,7 @@ jobs:
             --min-works "${{ steps.plan.outputs.min_works }}" --min-citations "${{ steps.plan.outputs.min_citations }}" \
             --min-h-index "${{ steps.plan.outputs.min_h_index }}" --window-years "${{ steps.plan.outputs.window_years }}" \
             --size-budget-mb "${{ steps.plan.outputs.size_budget_mb }}" --search-index-rows "${{ steps.plan.outputs.search_index_rows }}" \
+            ${{ steps.plan.outputs.skip_scrape == 'true' && '--skip-scrape' || '' }} \
             --time-budget-minutes 270
           code=$?
           if [ "$code" = 75 ]; then
