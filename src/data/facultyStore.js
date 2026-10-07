@@ -118,6 +118,13 @@ export function loadPipelineStatus() {
   return statusPromise
 }
 
+// The latest laureate test (scripts/laureate_eval.py); null before the first run.
+let laureatePromise = null
+export function loadLaureateEval() {
+  laureatePromise ??= tryJson('laureate_eval.json', null)
+  return laureatePromise
+}
+
 export function loadCatalog() {
   catalogPromise ??= (async () => {
     const [universities, domains, metadata] = await Promise.all([

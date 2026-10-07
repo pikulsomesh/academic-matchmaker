@@ -226,6 +226,14 @@ jobs:
           QUALITY_ALLOW_SHRINK: ${{ vars.QUALITY_ALLOW_SHRINK }}
         run: python scripts/quality_gate.py check --mode "${{ needs.plan.outputs.mode }}" --budget-mb "${{ needs.plan.outputs.size_budget_mb }}"
 
+      # Matches the 2026 Fields Medal and Nobel Prize winners (eval/laureates.json) against the fresh data and
+      # writes laureate_eval.json, whose pass/fail marker the site's Demo tab shows. A failing marker does not
+      # block publishing; the step is allowed to fail so a crash only leaves status "error".
+      - name: Laureate test
+        if: needs.plan.outputs.mode != 'skip' && steps.assemble.outputs.paused != 'true'
+        continue-on-error: true
+        uses: ./.github/actions/laureate-test
+
       # Also runs on a skipped plan the first time, to seed an empty dataset with the current data.
       - name: Publish data to Hugging Face
         if: >

@@ -14,11 +14,12 @@ export function parseHash(hash = '') {
     institution: params.get('inst') ?? '',
     domains: (params.get('domains') ?? '').split('|').filter(Boolean),
     researcher: params.get('r') ?? '',
+    view: params.get('view') === 'demo' ? 'demo' : 'search',
   }
 }
 
 // `sort` is only written once the visitor picked one, so a shared link doesn't pin the default.
-export function buildHash({ query = '', sort = null, country = '', institution = '', domains = [], researcher = '' }) {
+export function buildHash({ query = '', sort = null, country = '', institution = '', domains = [], researcher = '', view = 'search' }) {
   const params = new URLSearchParams()
   if (query.trim()) params.set('q', query.trim())
   if (sort) params.set('sort', sort)
@@ -26,6 +27,7 @@ export function buildHash({ query = '', sort = null, country = '', institution =
   if (institution) params.set('inst', institution)
   if (domains.length) params.set('domains', domains.join('|'))
   if (researcher) params.set('r', researcher)
+  if (view === 'demo') params.set('view', 'demo')
   const text = params.toString()
   return text ? `#${text}` : ''
 }
