@@ -109,6 +109,15 @@ let vectorsInfo = null // metadata.vectors: { k, dim, model, count } when vector
 let centroidsRequest = null
 const clusterRequests = new Map() // cluster number -> Promise<decoded shard>
 
+let statusPromise = null
+/** pipeline_status.json (written by scripts/quality_gate.py): when the data was last built, or null. */
+export function loadPipelineStatus() {
+  statusPromise ??= tryJson('pipeline_status.json', null).then(async (status) =>
+    status ? { ...status, url: `${await dataUrl()}pipeline_status.json` } : null,
+  )
+  return statusPromise
+}
+
 export function loadCatalog() {
   catalogPromise ??= (async () => {
     const [universities, domains, metadata] = await Promise.all([

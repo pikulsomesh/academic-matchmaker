@@ -5,7 +5,7 @@ import Modal from './Modal.jsx'
 import { ContactLinks, ShortlistToggle } from './FacultyCard.jsx'
 import { countryName, sortedWeights } from '../lib/format.js'
 import { useFullRecord } from '../data/facultyStore.js'
-import { RoleSection } from './RoleSignals.jsx'
+import { LabSection, RoleSection } from './RoleSignals.jsx'
 import { POSITION_LABEL } from '../lib/roles.js'
 
 // What in their work is closest to the visitor's profile; computed in the browser (useLocalAI.explain).
@@ -141,6 +141,8 @@ export default function FacultyDetailModal({ faculty: row, onClose, matchScore, 
           {matchScore != null && explain && !loading && <WhyMatch record={faculty} explain={explain} />}
 
           <RoleSection faculty={faculty} />
+
+          <LabSection faculty={faculty} />
 
           {loading && (
             <p className="flex items-center gap-2 p-6 text-sm text-mit-gray sm:px-8">

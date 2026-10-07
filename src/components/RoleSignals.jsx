@@ -1,4 +1,5 @@
-import { BadgeCheck, Crown, FlaskConical } from 'lucide-react'
+import { BadgeCheck, Coins, Crown, FlaskConical, TrendingUp, Users } from 'lucide-react'
+import { labSignals } from '../lib/labSignals.js'
 import { roleSignals } from '../lib/roles.js'
 
 const LEAD_HINT = 'Last (senior) author: usually the lab head who sets direction and holds the funding.'
@@ -94,6 +95,52 @@ export function RoleSection({ faculty }) {
         Estimated from h-index, publication record, citations and author order on OpenAlex. Some fields, such as economics and mathematics, list authors
         alphabetically, so treat this as a hint, not a title.
       </p>
+    </section>
+  )
+}
+
+const TREND = {
+  rising: 'Publishing more than in the three years before.',
+  steady: 'Publishing at a steady pace.',
+  declining: 'Publishing less than in the three years before.',
+}
+
+/** Detail-modal section about the group: turnover of first authors, funders, output trend. */
+export function LabSection({ faculty }) {
+  const s = labSignals(faculty)
+  if (!s.any) return null
+  return (
+    <section className="space-y-3 p-6 sm:px-8">
+      <h3 className="text-sm font-semibold uppercase tracking-wide text-mit-gray">Their lab</h3>
+      <div className="grid gap-3 sm:grid-cols-2">
+        {s.firstAuthors != null && (
+          <Stat
+            icon={Users}
+            label="Different first authors"
+            value={`${s.firstAuthors} of ${s.papers}`}
+            hint={`${s.firstAuthors} different people were first author on their last ${s.papers} senior-author papers. More names usually means a bigger group that brings in new people.`}
+          />
+        )}
+        {s.trend && (
+          <Stat
+            icon={TrendingUp}
+            label="Recent output"
+            value={`${s.recent} papers`}
+            hint={`${TREND[s.trend]} ${s.recent} in the last three full years, ${s.prior} in the three before.`}
+          />
+        )}
+      </div>
+      {s.funders.length > 0 && (
+        <p className="flex flex-wrap items-center gap-2 text-sm text-charcoal">
+          <Coins className="h-4 w-4 text-mit-gray" /> <span className="font-medium">Recent funders</span>
+          {s.funders.map((name) => (
+            <span key={name} className="rounded-full border border-gray-200 px-2.5 py-0.5 text-xs">
+              {name}
+            </span>
+          ))}
+        </p>
+      )}
+      <p className="text-xs leading-relaxed text-mit-gray">From OpenAlex author order, funder and yearly output data; a hint about the group, not a measure of it.</p>
     </section>
   )
 }

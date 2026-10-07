@@ -21,7 +21,7 @@ import re
 import sys
 from datetime import date, timedelta
 
-from faculty import (AUTHOR_SELECT, DATA_DIR, WORK_SELECT, compute_domains, contact_flags, coverage_config,
+from faculty import (AUTHOR_SELECT, apply_lab_signals, output_counts, DATA_DIR, WORK_SELECT, compute_domains, contact_flags, coverage_config,
                      merge_publications, last_publication_year, load_records, now_iso, publication_entry, read_json,
                      size_budget_mb, today_iso, write_json, write_records)
 from openalex import MAX_OR_VALUES, OpenAlexClient, chunks, short_id
@@ -81,6 +81,7 @@ def run(data_dir, client, overlap_days=30, since=None, until=None):
         record = by_id[author_id]
         before = {p.get("id") for p in record.get("recent_publications", [])}
         record["recent_publications"] = merge_publications(record.get("recent_publications"), entries)
+        apply_lab_signals(record, record["recent_publications"])
         added += sum(1 for p in record["recent_publications"] if p.get("id") not in before)
 
     refreshed = 0
@@ -96,6 +97,7 @@ def run(data_dir, client, overlap_days=30, since=None, until=None):
         primary, weights = compute_domains(author.get("topics"))
         if weights:
             record["primary_domain"], record["domain_weights"] = primary, weights
+        record.update(output_counts(author))
         record["flags"] = contact_flags(record)
         refreshed += 1
 

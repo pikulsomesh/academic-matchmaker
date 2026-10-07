@@ -22,6 +22,7 @@ on:
 permissions:
   contents: write
   actions: write
+  issues: write
 
 concurrency:
   group: data-update
@@ -172,6 +173,11 @@ jobs:
       - run: pip install -r scripts/requirements.txt
         if: needs.plan.outputs.mode != 'skip'
 
+      # Remember what is published now, so the quality gate can tell if the new build lost people.
+      - name: Snapshot current data
+        if: needs.plan.outputs.mode != 'skip'
+        run: python scripts/quality_gate.py snapshot
+
       - name: Cache embedding model
         if: needs.plan.outputs.mode != 'skip'
         uses: actions/cache@v4
@@ -212,6 +218,14 @@ jobs:
         if: needs.plan.outputs.mode != 'skip' && steps.assemble.outputs.paused != 'true'
         run: python scripts/build_search_index.py
 
+      # Blocks publishing a broken build (missing files, lost people, over budget) and writes
+      # pipeline_status.json, which the site shows. Set the QUALITY_ALLOW_SHRINK variable to 1 for an intended shrink.
+      - name: Quality gate
+        if: needs.plan.outputs.mode != 'skip' && steps.assemble.outputs.paused != 'true'
+        env:
+          QUALITY_ALLOW_SHRINK: ${{ vars.QUALITY_ALLOW_SHRINK }}
+        run: python scripts/quality_gate.py check --mode "${{ needs.plan.outputs.mode }}" --budget-mb "${{ needs.plan.outputs.size_budget_mb }}"
+
       # Also runs on a skipped plan the first time, to seed an empty dataset with the current data.
       - name: Publish data to Hugging Face
         if: >
@@ -245,3 +259,28 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh workflow run deploy.yml --ref "${{ github.ref_name }}"
+
+      # One open "data-pipeline" issue while the pipeline is failing; closed again by the next good run.
+      - name: Open an issue when the run fails
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh label create data-pipeline --color B60205 --description "Data pipeline run failed" || true
+          body="The data pipeline run failed: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          if [ -f .cache/quality_gate_report.md ]; then body="$body"$'\n\n'"$(cat .cache/quality_gate_report.md)"; fi
+          existing=$(gh issue list --label data-pipeline --state open --json number --jq '.[0].number')
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --body "$body"
+          else
+            gh issue create --label data-pipeline --title "Data pipeline run failed" --body "$body"
+          fi
+
+      - name: Close the pipeline issue after a good run
+        if: success() && needs.plan.outputs.mode != 'skip' && steps.assemble.outputs.paused != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for n in $(gh issue list --label data-pipeline --state open --json number --jq '.[].number'); do
+            gh issue close "$n" --comment "Fixed by ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          done
