@@ -59,7 +59,18 @@ def tier_for(coverage, per_institution):
     return chosen
 
 
-def plan(event, schedule, mode_input, per_institution_input, metadata, coverage, shards_ready):
+def site_reads_chunks(src_dir=SRC_DIR):
+    """True once the website follows record_file to chunked full records (needed past the first tier)."""
+    for folder, _, files in os.walk(src_dir):
+        for name in files:
+            if name.endswith((".js", ".jsx", ".ts", ".tsx")):
+                with open(os.path.join(folder, name), encoding="utf-8") as fh:
+                    if "record_file" in fh.read():
+                        return True
+    return False
+
+
+def plan(event, schedule, mode_input, per_institution_input, metadata, coverage, shards_ready, chunks_ready=True):
     """-> (mode, per_institution, reason). mode is 'full', 'cdc' or 'skip'."""
     target = tier_sizes(coverage)[-1]
     if event == "workflow_dispatch":
@@ -79,6 +90,8 @@ def plan(event, schedule, mode_input, per_institution_input, metadata, coverage,
         return "skip", built, f"index already built at {built} per institution"
     if not shards_ready:
         return "skip", bigger[0], "waiting for the website to read per-university files"
+    if bigger[0] > tier_sizes(coverage)[0] and not chunks_ready:
+        return "skip", bigger[0], "waiting for the website to read chunked records (record_file)"
     return "full", bigger[0], f"expanding coverage from {built} to {bigger[0]} per institution"
 
 
@@ -94,6 +107,7 @@ def main(argv=None):
         read_json(os.path.join(DATA_DIR, "metadata.json")),
         read_json(COVERAGE_CONFIG),
         site_reads_shards(),
+        site_reads_chunks(),
     )
     print(f"Plan: {mode} ({reason})", file=sys.stderr)
     out = os.environ.get("GITHUB_OUTPUT")

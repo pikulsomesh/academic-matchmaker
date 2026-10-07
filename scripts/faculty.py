@@ -195,6 +195,7 @@ FACULTY_SHARD_DIR = "faculty"
 EMBEDDING_SHARD_DIR = "embeddings"
 COMBINED_LIMIT = 30000
 SEARCH_SHARD_DIR = "search"
+RECORD_CHUNK = 1000    # people per full-record file once a university is bigger than this
 EMBEDDING_BYTES = 560  # one int8 vector (384) as base64 plus its id, per person
 
 
@@ -202,7 +203,7 @@ def shard_paths(institution_id):
     return (f"{FACULTY_SHARD_DIR}/{institution_id}.json", f"{EMBEDDING_SHARD_DIR}/{institution_id}.json")
 
 
-def search_row(record):
+def search_row(record, record_file=None):
     """Slim record for faculty_search.json: enough to search, filter, sort and draw a card."""
     return {
         "id": record["id"],
@@ -220,6 +221,7 @@ def search_row(record):
         "last_author_recent": record.get("last_author_recent"),
         "recent_works": record.get("recent_works"),
         "last_publication_year": record.get("last_publication_year"),
+        "record_file": record_file,
     }
 
 
@@ -273,23 +275,38 @@ def write_records(records, universities, data_dir, combined_limit=COMBINED_LIMIT
     if not complete:
         os.makedirs(search_dir)
     keep = set()
+    file_of = {}
     for uni in universities:
-        faculty_file, embeddings_file = shard_paths(uni["id"])
-        uni["faculty_file"], uni["embeddings_file"] = faculty_file, embeddings_file
-        uni["faculty_count"] = len(by_inst.get(uni["id"], []))
-        write_faculty_index(by_inst.get(uni["id"], []), os.path.join(data_dir, faculty_file))
+        people = sorted(by_inst.get(uni["id"], []), key=importance, reverse=True)
+        uni["embeddings_file"] = shard_paths(uni["id"])[1]
+        uni["faculty_count"] = len(people)
+        if len(people) <= RECORD_CHUNK:
+            files = [shard_paths(uni["id"])[0]]
+            write_faculty_index(people, os.path.join(data_dir, files[0]))
+            keep.add(f"{uni['id']}.json")
+        else:
+            files = []
+            shutil.rmtree(os.path.join(data_dir, FACULTY_SHARD_DIR, uni["id"]), ignore_errors=True)  # stale chunks
+            for n, start in enumerate(range(0, len(people), RECORD_CHUNK)):
+                path = f"{FACULTY_SHARD_DIR}/{uni['id']}/{n}.json"
+                write_faculty_index(people[start:start + RECORD_CHUNK], os.path.join(data_dir, path))
+                files.append(path)
+            keep.add(uni["id"])
+        for n, record in enumerate(people):
+            file_of[record["id"]] = files[n // RECORD_CHUNK]
+        uni["faculty_files"], uni["faculty_file"] = files, files[0]
         uni.pop("search_file", None)
         if not complete:
             uni["search_file"] = f"{SEARCH_SHARD_DIR}/{uni['id']}.json"
-            write_faculty_index([search_row(r) for r in by_inst.get(uni["id"], [])], os.path.join(data_dir, uni["search_file"]))
-        keep.add(os.path.basename(faculty_file))
+            write_faculty_index([search_row(r, file_of[r["id"]]) for r in people], os.path.join(data_dir, uni["search_file"]))
     shard_dir = os.path.join(data_dir, FACULTY_SHARD_DIR)
-    for name in os.listdir(shard_dir):  # universities dropped from the config
-        if name.endswith(".json") and name not in keep:
-            os.remove(os.path.join(shard_dir, name))
+    for name in os.listdir(shard_dir):  # universities dropped from the config, or files that became chunks
+        if name not in keep:
+            full = os.path.join(shard_dir, name)
+            shutil.rmtree(full) if os.path.isdir(full) else os.remove(full)
 
     top = records if complete else sorted(records, key=importance, reverse=True)[:search_index_rows]
-    write_faculty_index([search_row(r) for r in top], os.path.join(data_dir, "faculty_search.json"))
+    write_faculty_index([search_row(r, file_of[r["id"]]) for r in top], os.path.join(data_dir, "faculty_search.json"))
     write_json(os.path.join(data_dir, "universities.json"), universities)
     write_domains(records, os.path.join(data_dir, "domains.json"))
     combined = os.path.join(data_dir, "faculty_index.json")
@@ -307,6 +324,7 @@ def load_records(data_dir):
     if universities and all(u.get("faculty_file") for u in universities):
         records = []
         for uni in universities:
-            records.extend(read_json(os.path.join(data_dir, uni["faculty_file"]), []))
+            for path in uni.get("faculty_files") or [uni["faculty_file"]]:
+                records.extend(read_json(os.path.join(data_dir, path), []))
         return records, universities
     return read_json(os.path.join(data_dir, "faculty_index.json"), []), universities

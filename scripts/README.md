@@ -55,7 +55,9 @@ verified ones. `--require-contact` drops records with neither an email nor an in
 ## Output files (`public/data/`)
 
 - `universities.json`: `[{id, name, country_code, rank, homepage_url, faculty_count, faculty_file, embeddings_file}]`
-- `faculty/<institution id>.json`: that university's records, one per line. Blueprint schema plus
+- `faculty/<institution id>.json`: that university's records, one per line (universities over 1,000 people are
+  split into `faculty/<institution id>/<n>.json`, 1,000 per file, most important first; `universities.json`
+  lists them as `faculty_files`, and every slim row carries `record_file`, the file holding its record). Blueprint schema plus
   `institution.id`, `h_index`, `works_count`, `orcid`, `profile_source`, `flags`, and `id`/`date`
   on each publication. Verified records first.
 - `embeddings/<institution id>.json`: embeddings for the matching faculty file, same row order (format below).
@@ -68,6 +70,8 @@ verified ones. `--require-contact` drops records with neither an email nor an in
   since one file that large is too slow for the browser.
 
 ## Growing the database
+
+Coverage beyond the first tier waits until `src/` mentions `record_file` (so the site can read chunked full records).
 
 `config/coverage.json` holds the plan. Each daily run builds the next tier in `tiers` (1,000, 3,000,
 10,000, 25,000, 50,000 people per university) with looser thresholds each step (works, citations,

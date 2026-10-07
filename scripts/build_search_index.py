@@ -143,7 +143,7 @@ def main(argv=None, encoder=None):
     for uni in universities:
         if not uni.get("embeddings_file"):
             continue
-        shard_ids = [r["id"] for r in read_json(os.path.join(args.data_dir, uni["faculty_file"]), [])]
+        shard_ids = [r["id"] for r in records if r["institution"].get("id") == uni["id"]]
         rows = [row_of[fid] for fid in shard_ids]
         write_json(os.path.join(args.data_dir, uni["embeddings_file"]),
                    payload(shard_ids, [texts[i] for i in rows], q[rows]), compact=True)

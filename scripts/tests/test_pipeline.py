@@ -203,6 +203,43 @@ class SizeAndIndexTests(unittest.TestCase):
             shutil.rmtree(d)
 
 
+class ChunkTests(unittest.TestCase):
+    def test_big_university_gets_chunks_with_record_file(self):
+        d = tempfile.mkdtemp()
+        try:
+            unis = [{"id": "I1", "name": "U", "country_code": "US", "rank": 1}]
+            recs = SizeAndIndexTests().records(2500)
+            faculty.write_records(recs, unis, d)
+            uni = json.load(open(os.path.join(d, "universities.json")))[0]
+            self.assertEqual(uni["faculty_files"], ["faculty/I1/0.json", "faculty/I1/1.json", "faculty/I1/2.json"])
+            self.assertEqual(uni["faculty_file"], "faculty/I1/0.json")
+            rows = json.load(open(os.path.join(d, "faculty_search.json")))
+            by_id = {r["id"]: r["record_file"] for r in rows}
+            self.assertEqual(by_id["A2499"], "faculty/I1/0.json", "most important first")
+            self.assertEqual(by_id["A0"], "faculty/I1/2.json")
+            self.assertEqual(len(faculty.load_records(d)[0]), 2500)
+            faculty.write_records(recs[:500], unis, d)  # shrinks back to one file; stale chunks are removed
+            self.assertEqual(sorted(os.listdir(os.path.join(d, "faculty"))), ["I1.json"])
+            self.assertEqual(json.load(open(os.path.join(d, "faculty_search.json")))[0]["record_file"], "faculty/I1.json")
+        finally:
+            shutil.rmtree(d)
+
+    def test_bigger_tiers_wait_for_the_site(self):
+        cov = {"initial_per_institution": 1000, "tiers": [{"per_institution": 1000}, {"per_institution": 3000}]}
+        meta = {"last_ingestion": "x", "per_institution": 1000}
+        args = ("schedule", "0 2 * * *", "", "", meta, cov, True)
+        self.assertEqual(plan_run.plan(*args, chunks_ready=False)[0], "skip")
+        self.assertEqual(plan_run.plan(*args, chunks_ready=True)[:2], ("full", 3000))
+        d = tempfile.mkdtemp()
+        try:
+            pathlib.Path(d, "a.js").write_text("fetch(row.faculty_file)")
+            self.assertFalse(plan_run.site_reads_chunks(d))
+            pathlib.Path(d, "b.js").write_text("fetch(row.record_file)")
+            self.assertTrue(plan_run.site_reads_chunks(d))
+        finally:
+            shutil.rmtree(d)
+
+
 class PauseTests(unittest.TestCase):
     def test_time_budget_pauses_with_exit_75(self):
         tmp = tempfile.mkdtemp()
@@ -423,7 +460,7 @@ class PipelineTests(unittest.TestCase):
         row = self.read("faculty_search.json")[0]
         self.assertEqual(set(row), {"id", "name", "title", "institution_id", "primary_domain", "domains",
                                     "citation_count", "email", "profile_url", "has_email", "seniority_score",
-                                "first_author_recent", "last_author_recent", "recent_works", "last_publication_year"})
+                                "first_author_recent", "last_author_recent", "recent_works", "last_publication_year", "record_file"})
         # Shard embeddings equal the matching rows of the combined file.
         combined = self.read("faculty_embeddings.json")
         self.assertEqual(self.read(uni["embeddings_file"])["data"], combined["data"])
