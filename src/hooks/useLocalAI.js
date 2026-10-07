@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { cachedRecords, defaultMatchScope, hasEmbeddingShards, hasVectorIndex, loadEmbeddings, searchVectors } from '../data/facultyStore.js'
+import { fetchOpenAlexProfile } from '../ai/openalexProfile.js'
 import { documentKind, extractDocumentText } from '../ai/documentText.js'
 import {
   EMPTY_PROFILE,
@@ -174,6 +175,17 @@ export default function useLocalAI(faculty = NO_FACULTY, { institutionIds = null
     [run],
   )
 
+  const addOpenAlexProfile = useCallback(
+    (input) =>
+      run('Reading your OpenAlex profile…', async () => {
+        const { name, interests, text } = await fetchOpenAlexProfile(input)
+        setSources((s) => [...s, { name: `${name} (OpenAlex)`, kind: 'openalex', interests }])
+        setProfile((p) => mergeProfiles(p, { interests, summary: '', text }))
+        return { interests, text }
+      }),
+    [run],
+  )
+
   const sendMessage = useCallback(
     (text) => {
       if (!text?.trim()) return Promise.resolve(null)
@@ -317,6 +329,7 @@ export default function useLocalAI(faculty = NO_FACULTY, { institutionIds = null
     device,
     addDocument,
     addText,
+    addOpenAlexProfile,
     sendMessage,
     removeInterest,
     setInterests,
