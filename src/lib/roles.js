@@ -23,8 +23,8 @@ export function roleSignals(f) {
     piScore,
     firstAuthor,
     lastAuthor,
-    // Papers whose author position is known, when the full record is loaded.
-    knownPapers: positions.length || null,
+    // Of their latest (up to 5) papers, how many have a known author position.
+    knownPapers: num(f?.recent_works) || positions.length || null,
     // The pipeline writes 0/0 when positions are unknown, so only non-zero counts say anything.
     hasAuthorship: (firstAuthor ?? 0) + (lastAuthor ?? 0) > 0,
     likelyPI: piScore != null && piScore >= PI_THRESHOLD,
