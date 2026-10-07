@@ -8,52 +8,17 @@ import FacultyDetailModal from './components/FacultyDetailModal.jsx'
 import AboutModal from './components/AboutModal.jsx'
 import useFacultySearch, { SORTS } from './hooks/useFacultySearch.js'
 import useLocalAI from './hooks/useLocalAI.js'
+import useMatcherBridge from './hooks/useMatcherBridge.js'
 
 const PAGE_SIZE = 24
 
-// Keeps the matcher usable (files listed, chat echoed) until useLocalAI
-// provides the real handlers. Anything useLocalAI returns overrides this.
-function useMatcherPreview() {
-  const [documents, setDocuments] = useState([])
-  const [messages, setMessages] = useState([])
-  return {
-    status: { state: 'unavailable' },
-    documents,
-    messages,
-    interests: [],
-    matchScores: null,
-    busy: false,
-    processFiles: (files) =>
-      setDocuments((d) => [
-        ...d,
-        ...files.map((f) => ({ id: `${f.name}-${f.size}-${f.lastModified}`, name: f.name, status: 'queued' })),
-      ]),
-    removeDocument: (id) => setDocuments((d) => d.filter((x) => x.id !== id)),
-    sendMessage: (text) =>
-      setMessages((m) => [
-        ...m,
-        { id: `u${m.length}`, role: 'user', content: text },
-        {
-          id: `a${m.length}`,
-          role: 'assistant',
-          content: 'The in-browser model is not connected yet. Use the keyword search and filters below for now.',
-        },
-      ]),
-    findMatches: () => {},
-    clearMatches: () => {},
-    reset: () => {
-      setDocuments([])
-      setMessages([])
-    },
-  }
-}
-
 export default function App() {
-  const preview = useMatcherPreview()
-  const ai = { ...preview, ...useLocalAI() }
-
-  const search = useFacultySearch({ matchScores: ai.matchScores })
-  const { results, loading, error, query, setQuery, sort, setSort, activeFilterCount } = search
+  const search = useFacultySearch()
+  const { results, loading, error, query, setQuery, sort, setSort, activeFilterCount, matchScores } = search
+  const ai = useLocalAI(search.faculty)
+  const matcher = useMatcherBridge(ai)
+  const { setMatchScores } = search
+  useEffect(() => setMatchScores(matcher.matchScores), [matcher.matchScores, setMatchScores])
 
   const [selected, setSelected] = useState(null)
   const [aboutOpen, setAboutOpen] = useState(false)
@@ -62,7 +27,7 @@ export default function App() {
 
   useEffect(() => setVisible(PAGE_SIZE), [results])
   const shown = useMemo(() => results.slice(0, visible), [results, visible])
-  const scoreOf = (f) => (ai.matchScores ? ai.matchScores[f.id] : undefined)
+  const scoreOf = (f) => (matchScores ? matchScores[f.id] : undefined)
 
   return (
     <div className="flex min-h-screen flex-col bg-white">
@@ -79,19 +44,7 @@ export default function App() {
           </p>
         </div>
 
-        <MatcherInterface
-          status={ai.status}
-          documents={ai.documents}
-          onFilesAdded={ai.processFiles}
-          onRemoveDocument={ai.removeDocument}
-          messages={ai.messages}
-          onSendMessage={ai.sendMessage}
-          interests={ai.interests}
-          onRemoveInterest={ai.removeInterest}
-          onFindMatches={ai.findMatches}
-          onReset={ai.reset}
-          busy={ai.busy}
-        />
+        <MatcherInterface {...matcher.matcherProps} />
 
         <div className="mt-10 flex flex-col gap-8 md:flex-row">
           <FilterSidebar
@@ -142,7 +95,7 @@ export default function App() {
               </div>
             </div>
 
-            {ai.matchScores && (
+            {matchScores ? (
               <div className="flex items-center justify-between gap-3 rounded-xl border border-cardinal/20 bg-cardinal/5 px-4 py-3 text-sm">
                 <span className="flex items-center gap-2 text-charcoal">
                   <Sparkles className="h-4 w-4 text-cardinal" />
@@ -150,12 +103,22 @@ export default function App() {
                 </span>
                 <button
                   type="button"
-                  onClick={ai.clearMatches}
+                  onClick={matcher.clearMatches}
                   className="flex items-center gap-1 font-medium text-cardinal hover:underline"
                 >
-                  <X className="h-4 w-4" /> Clear matches
+                  <X className="h-4 w-4" /> Show all faculty
                 </button>
               </div>
+            ) : (
+              matcher.hasMatches && (
+                <button
+                  type="button"
+                  onClick={matcher.showMatches}
+                  className="flex items-center gap-1.5 text-sm font-medium text-cardinal hover:underline"
+                >
+                  <Sparkles className="h-4 w-4" /> Show my matches again
+                </button>
+              )
             )}
 
             {!loading && !error && (

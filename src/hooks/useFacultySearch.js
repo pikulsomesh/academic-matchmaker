@@ -55,11 +55,11 @@ async function fetchJson(name, fallback) {
  * Loads the faculty index, keeps a FlexSearch full-text index over it, and
  * applies keyword search, cascading filters and sorting.
  *
- * `matchScores` is an optional `{ [facultyId]: score }` map (0–1) from the
- * local AI matcher. When present, only scored faculty are shown and the
+ * `setMatchScores` takes an optional `{ [facultyId]: score }` map (0–1) from
+ * the local AI matcher. While set, only scored faculty are shown and the
  * "relevance" sort orders by that score.
  */
-export default function useFacultySearch({ matchScores = null } = {}) {
+export default function useFacultySearch() {
   const [faculty, setFaculty] = useState([])
   const [universities, setUniversities] = useState([])
   const [allDomains, setAllDomains] = useState([])
@@ -69,6 +69,7 @@ export default function useFacultySearch({ matchScores = null } = {}) {
   const [query, setQuery] = useState('')
   const [filters, setFilters] = useState(EMPTY_FILTERS)
   const [sort, setSort] = useState('relevance')
+  const [matchScores, setMatchScores] = useState(null)
 
   useEffect(() => {
     let cancelled = false
@@ -178,5 +179,7 @@ export default function useFacultySearch({ matchScores = null } = {}) {
     activeFilterCount,
     sort,
     setSort,
+    matchScores,
+    setMatchScores,
   }
 }

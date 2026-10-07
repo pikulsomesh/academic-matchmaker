@@ -12,12 +12,15 @@ import { Bot, FileText, LoaderCircle, Send, Sparkles, Trash2, Upload, X } from '
  * @param {Array<{id: string, name: string, status: 'queued'|'processing'|'done'|'error', error?: string}>} props.documents
  * @param {(files: File[]) => void} props.onFilesAdded  Called with dropped or picked files.
  * @param {(id: string) => void}    props.onRemoveDocument
+ * @param {(doc) => boolean}        props.canRemoveDocument  Hide the remove button for some documents.
  * @param {Array<{id: string, role: 'user'|'assistant', content: string}>} props.messages
  * @param {(text: string) => void}  props.onSendMessage
  * @param {string[]}                props.interests     Merged research interests extracted so far.
  * @param {(interest: string) => void} props.onRemoveInterest
- * @param {() => void}              props.onFindMatches  Embed interests and rank faculty.
+ * @param {() => void}              [props.onFindMatches] Explicit "Find matches" action. Omit when
+ *        matching re-runs on its own as interests change; a hint replaces the button.
  * @param {() => void}              props.onReset        Clear documents, chat and matches.
+ * @param {() => void}              [props.onActivate]   Called once on first interaction (e.g. to preload models).
  * @param {boolean}                 props.busy           Disable inputs while a job runs.
  * @param {string}                  props.accept         File input accept list.
  */
@@ -26,12 +29,14 @@ export default function MatcherInterface({
   documents = [],
   onFilesAdded = () => {},
   onRemoveDocument = () => {},
+  canRemoveDocument = () => true,
   messages = [],
   onSendMessage = () => {},
   interests = [],
   onRemoveInterest,
-  onFindMatches = () => {},
+  onFindMatches,
   onReset,
+  onActivate,
   busy = false,
   accept = '.pdf,.txt,.png,.jpg,.jpeg,.webp',
 }) {
@@ -39,6 +44,12 @@ export default function MatcherInterface({
   const [draft, setDraft] = useState('')
   const fileInput = useRef(null)
   const chatEnd = useRef(null)
+  const activated = useRef(false)
+  const activate = () => {
+    if (activated.current || !onActivate) return
+    activated.current = true
+    onActivate()
+  }
 
   useEffect(() => {
     chatEnd.current?.scrollIntoView({ block: 'nearest' })
@@ -66,7 +77,7 @@ export default function MatcherInterface({
   const hasInput = documents.length > 0 || messages.length > 0 || interests.length > 0
 
   return (
-    <section className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
+    <section onPointerEnter={activate} onFocus={activate} className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
       <header className="flex flex-wrap items-start justify-between gap-3 border-b border-gray-100 px-5 py-4 sm:px-6">
         <div>
           <h2 className="flex items-center gap-2 text-lg font-semibold tracking-tight text-charcoal">
@@ -140,14 +151,16 @@ export default function MatcherInterface({
                     {d.status === 'error' && d.error && <span className="block text-xs text-cardinal">{d.error}</span>}
                   </span>
                   <DocStatus status={d.status} />
-                  <button
-                    type="button"
-                    onClick={() => onRemoveDocument(d.id)}
-                    aria-label={`Remove ${d.name}`}
-                    className="rounded-md p-1 text-mit-gray transition hover:bg-gray-50 hover:text-charcoal"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
+                  {canRemoveDocument(d) && (
+                    <button
+                      type="button"
+                      onClick={() => onRemoveDocument(d.id)}
+                      aria-label={`Remove ${d.name}`}
+                      className="rounded-md p-1 text-mit-gray transition hover:bg-gray-50 hover:text-charcoal"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  )}
                 </li>
               ))}
             </ul>
@@ -239,15 +252,23 @@ export default function MatcherInterface({
               <Trash2 className="h-4 w-4" /> Reset
             </button>
           )}
-          <button
-            type="button"
-            onClick={onFindMatches}
-            disabled={busy || interests.length === 0}
-            className="flex items-center gap-1.5 rounded-xl bg-cardinal px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-cardinal/90 disabled:bg-gray-200 disabled:text-mit-gray disabled:shadow-none"
-          >
-            {busy ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-            Find matches
-          </button>
+          {onFindMatches ? (
+            <button
+              type="button"
+              onClick={onFindMatches}
+              disabled={busy || interests.length === 0}
+              className="flex items-center gap-1.5 rounded-xl bg-cardinal px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-cardinal/90 disabled:bg-gray-200 disabled:text-mit-gray disabled:shadow-none"
+            >
+              {busy ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+              Find matches
+            </button>
+          ) : (
+            interests.length > 0 && (
+              <span className="flex items-center gap-1.5 self-center text-xs text-mit-gray">
+                <Sparkles className="h-3.5 w-3.5 text-cardinal" /> Results below are ranked by these interests
+              </span>
+            )
+          )}
         </div>
       </footer>
     </section>
