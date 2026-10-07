@@ -5,7 +5,9 @@ import { MAX_DOCUMENT_CHARS } from './config.js'
 
 const MAX_INTERESTS = 15
 
-export const EMPTY_PROFILE = Object.freeze({ interests: [], summary: '' })
+// interests and summary come from the user (chat) or a document's own interest list; text is
+// research-relevant document text (quickProfile) that is embedded as is.
+export const EMPTY_PROFILE = Object.freeze({ interests: [], summary: '', text: '' })
 
 const EXTRACT_SYSTEM = `You read academic CVs, resumes, Google Scholar pages and LinkedIn profiles and list the person's research interests.
 Reply with JSON only, no prose, in this shape:
@@ -93,6 +95,77 @@ export function topicsFromText(text) {
   )
 }
 
+// --- Quick profile: no language model -------------------------------------------------
+//
+// A resume or CV is matched by embedding its research-relevant text directly with
+// MiniLM, so the first match needs only the small embedding model. quickProfile()
+// picks that text: a "Research interests" / "Summary" section when there is one,
+// otherwise the longest prose-like lines (publication titles, bullet points) with
+// contact details and headings left out.
+
+// MiniLM reads about 256 tokens, roughly this many characters.
+export const QUICK_TEXT_CHARS = 1000
+
+const FOCUS_HEADING =
+  /^(research\s+(interests?|summary|statement|focus|areas?|overview)|areas?\s+of\s+(research|interest|expertise)|interests?|summary|professional\s+summary|objective|profile|about(\s+me)?|abstract|expertise|keywords?)\s*:?$/i
+const LIST_HEADING = /^(research\s+interests?|areas?\s+of\s+(research|interest|expertise)|interests?|expertise|keywords?)\s*:?$/i
+const OTHER_HEADING =
+  /^(education|experience|employment|work\s+experience|professional\s+experience|publications?|selected\s+publications?|awards?|honou?rs|skills|references|teaching|service|projects?|courses|contact|presentations?|patents?|talks|affiliations?|funding|grants|research\s+experience)\s*:?$/i
+const NOISE =
+  /(@|https?:\/\/|www\.|linkedin\.com|github\.com|scholar\.google|orcid\.org|curriculum\s+vitae|\bpage\s+\d+|\+?\d[\d\s().-]{8,}\d)/i
+
+const wordCount = (line) => line.split(/\s+/).filter(Boolean).length
+const stripBullet = (line) => line.replace(/^[\s\-*•·▪◦‣\d.)]+/, '').trim()
+
+function trimToChars(parts, limit) {
+  const out = []
+  let used = 0
+  for (const part of parts) {
+    if (used + part.length > limit && out.length) break
+    out.push(part.slice(0, limit - used))
+    used += part.length + 1
+    if (used >= limit) break
+  }
+  return out.join(' ')
+}
+
+/**
+ * Research profile straight from document text, without a language model.
+ * -> { interests, text }: interests only when the document lists them under a heading
+ * ("Research interests: ..."); text is what MiniLM embeds.
+ */
+export function quickProfile(text) {
+  const lines = String(text ?? '')
+    .split(/\r?\n/)
+    .map((l) => l.replace(/\s+/g, ' ').trim())
+    .filter(Boolean)
+
+  let interests = []
+  const sectionLines = []
+  const start = lines.findIndex((l) => FOCUS_HEADING.test(l.replace(/:$/, '')))
+  if (start !== -1) {
+    const listed = LIST_HEADING.test(lines[start])
+    for (const line of lines.slice(start + 1, start + 13)) {
+      if (OTHER_HEADING.test(line) || FOCUS_HEADING.test(line)) break
+      if (!NOISE.test(line)) sectionLines.push(stripBullet(line))
+    }
+    // "Interests: a, b, c" on the heading line itself.
+    const inline = lines[start].match(/^[^:]{3,40}:\s*(.+)$/)
+    if (inline && !NOISE.test(inline[1])) sectionLines.unshift(inline[1])
+    const short = sectionLines.length > 0 && sectionLines.every((l) => wordCount(l) <= 8)
+    if (listed && short) interests = topicsFromText(sectionLines.join('\n'))
+  }
+
+  const prose = lines
+    .map(stripBullet)
+    .filter((l) => wordCount(l) >= 4 && !NOISE.test(l) && !FOCUS_HEADING.test(l) && !OTHER_HEADING.test(l))
+    // A one-line extraction (PDF without line breaks, OCR): fall back to the start of the text.
+    .map((l) => l.slice(0, 400))
+  // A real section is the best statement of focus; otherwise fall back to the document's prose.
+  const parts = sectionLines.join(' ').length >= 40 ? sectionLines : [...sectionLines, ...prose.filter((l) => !sectionLines.includes(l))]
+  return { interests, text: trimToChars(parts, QUICK_TEXT_CHARS) }
+}
+
 // Returns { interests, summary, reply } from raw model output.
 export function parseModelProfile(output) {
   const obj = findJsonObject(output)
@@ -112,9 +185,10 @@ export function parseModelProfile(output) {
 }
 
 // Combines profiles from several sources. Later sources win on summary;
-// interests are unioned in order.
+// interests are unioned in order and document texts are joined.
 export function mergeProfiles(...profiles) {
   const interests = dedupeInterests(profiles.flatMap((p) => p?.interests ?? []))
   const summary = [...profiles].reverse().find((p) => p?.summary)?.summary ?? ''
-  return { interests, summary }
+  const text = [...new Set(profiles.map((p) => p?.text).filter(Boolean))].join(' ')
+  return { interests, summary, text }
 }

@@ -1,4 +1,4 @@
-// Turns an uploaded file into plain text for the Qwen extractor. Heavy
+// Turns an uploaded file into plain text for the quick profile (ai/profile.js). Heavy
 // libraries (pdf.js, Tesseract) load only when a file of that type arrives.
 
 const MAX_PDF_PAGES = 8
@@ -14,7 +14,8 @@ async function pdfText(file) {
     const pages = []
     for (let n = 1; n <= Math.min(doc.numPages, MAX_PDF_PAGES); n++) {
       const content = await (await doc.getPage(n)).getTextContent()
-      pages.push(content.items.map((item) => item.str ?? '').join(' '))
+      // Keep line breaks (hasEOL) so headings like "Research Interests" stay on their own line.
+      pages.push(content.items.map((item) => (item.str ?? '') + (item.hasEOL ? '\n' : ' ')).join(''))
     }
     return pages.join('\n')
   } finally {

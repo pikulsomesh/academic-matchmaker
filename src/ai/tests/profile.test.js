@@ -6,6 +6,8 @@ import {
   dedupeInterests,
   mergeProfiles,
   parseModelProfile,
+  QUICK_TEXT_CHARS,
+  quickProfile,
   topicsFromText,
 } from '../profile.js'
 
@@ -52,7 +54,7 @@ test('mergeProfiles unions interests and keeps the latest summary', () => {
     { interests: ['b', 'C'], summary: '' },
     { interests: [], summary: 'last' },
   )
-  assert.deepEqual(merged, { interests: ['A', 'B', 'C'], summary: 'last' })
+  assert.deepEqual(merged, { interests: ['A', 'B', 'C'], summary: 'last', text: '' })
 })
 
 test('prompts truncate documents and carry the current profile', () => {
@@ -62,4 +64,43 @@ test('prompts truncate documents and carry the current profile', () => {
   const chat = buildChatMessages({ interests: ['NLP'], summary: 's' }, ' add vision ')
   assert.match(chat[1].content, /"interests":\["NLP"\]/)
   assert.match(chat[1].content, /Message:\nadd vision$/)
+})
+
+test('quickProfile takes interests from a listed section and keeps contact details out', () => {
+  const resume = `Jane Doe
+jane@uni.edu | +1 (555) 123-4567 | https://janedoe.dev
+Research Interests
+- graph neural networks
+- catalyst discovery
+- density functional theory
+Education
+PhD in Chemistry, Somewhere University`
+  const { interests, text } = quickProfile(resume)
+  assert.deepEqual(interests, ['graph neural networks', 'catalyst discovery', 'density functional theory'])
+  assert.match(text, /graph neural networks/)
+  assert.doesNotMatch(text, /jane@uni\.edu|555|janedoe\.dev/)
+})
+
+test('quickProfile uses a prose summary section and leaves interests empty', () => {
+  const resume = `Summary:
+I study how single-cell RNA sequencing can reveal tumour heterogeneity and resistance to therapy.
+Experience
+Research assistant, Lab of Cancer Biology`
+  const { interests, text } = quickProfile(resume)
+  assert.deepEqual(interests, [])
+  assert.match(text, /^I study how single-cell/)
+  assert.doesNotMatch(text, /Research assistant/)
+})
+
+test('quickProfile without headings keeps long lines and caps the length', () => {
+  const lines = ['Jane Doe', 'jane@uni.edu']
+  for (let i = 0; i < 40; i++) lines.push(`Learning transferable representations for protein design, paper number ${i}`)
+  const { interests, text } = quickProfile(lines.join('\n'))
+  assert.deepEqual(interests, [])
+  assert.ok(text.length <= QUICK_TEXT_CHARS)
+  assert.match(text, /^Learning transferable/)
+})
+
+test('quickProfile is empty for text with nothing research-like', () => {
+  assert.deepEqual(quickProfile('Jane Doe\njane@uni.edu\n555 123 4567'), { interests: [], text: '' })
 })
