@@ -69,13 +69,12 @@ def run(data_dir, client, overlap_days=30, since=None, until=None):
     scanned = 0
     for work in fetch_new_works(client, institution_ids, since, until):
         scanned += 1
-        entry = publication_entry(work)
-        if not entry["title"]:
+        if not publication_entry(work)["title"]:
             continue
         for authorship in work.get("authorships") or []:
             author_id = short_id((authorship.get("author") or {}).get("id"))
             if author_id in by_id:
-                new_by_author.setdefault(author_id, []).append(entry)
+                new_by_author.setdefault(author_id, []).append(publication_entry(work, author_id))
 
     added = 0
     for author_id, entries in new_by_author.items():

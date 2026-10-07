@@ -168,13 +168,12 @@ def fetch_recent_works_batched(client, cache, author_ids, batch_size=25, months=
             "select": WORK_SELECT,
         }
         for work in client.iterate("works", params, max_results=200 * max_pages):
-            entry = publication_entry(work)
-            if not entry["title"]:
+            if not (work.get("title") or work.get("display_name") or "").strip():
                 continue
             for authorship in work.get("authorships") or []:
                 aid = short_id((authorship.get("author") or {}).get("id"))
                 if aid in wanted and len(found[aid]) < MAX_RECENT_PUBLICATIONS:
-                    found[aid].append(entry)
+                    found[aid].append(publication_entry(work, aid))
             if all(len(v) >= MAX_RECENT_PUBLICATIONS for v in found.values()):
                 break
         for aid, pubs in found.items():
@@ -196,7 +195,7 @@ def fetch_recent_works(client, cache, author_id):
         "per-page": MAX_RECENT_PUBLICATIONS,
         "select": WORK_SELECT,
     })
-    pubs = [publication_entry(w) for w in data.get("results", [])]
+    pubs = [publication_entry(w, author_id) for w in data.get("results", [])]
     return cache.put("works", author_id, [p for p in pubs if p["title"]])
 
 
