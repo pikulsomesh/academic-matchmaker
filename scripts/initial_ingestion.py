@@ -32,7 +32,7 @@ from urllib.parse import urlparse
 import requests
 
 import contacts
-from faculty import (AUTHOR_SELECT, DATA_DIR, MAX_RECENT_PUBLICATIONS, WORK_SELECT, compute_domains,
+from faculty import (AUTHOR_SELECT, DATA_DIR, apply_lab_signals, output_counts, MAX_RECENT_PUBLICATIONS, WORK_SELECT, compute_domains,
                      contact_flags, merge_publications, now_iso, publication_entry, read_json, today_iso,
                      verification_rank, write_json, write_records, last_publication_year)
 from openalex import OpenAlexClient, RateLimiter, chunks, short_id
@@ -338,6 +338,8 @@ def build_record(author, uni, inst, recent, found):
         "profile_source": found["profile_source"],
         "last_publication_year": last_publication_year(author),
     }
+    apply_lab_signals(record, record["recent_publications"])
+    record.update(output_counts(author))
     record["flags"] = contact_flags(record)
     return record
 

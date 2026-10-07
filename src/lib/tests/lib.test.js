@@ -97,3 +97,14 @@ test('sharedInterests finds interests whose words all appear in the researcherâ€
     'materials science',
   ])
 })
+
+test('lab signals read the pipeline fields and tolerate their absence', async () => {
+  const { labSignals, outputTrend } = await import('../labSignals.js')
+  assert.equal(labSignals({}).any, false)
+  const s = labSignals({ lab_first_authors: 4, lab_senior_papers: 5, recent_funders: ['NIH', 'NSF'], works_recent_3y: 12, works_prior_3y: 5 })
+  assert.deepEqual([s.firstAuthors, s.papers, s.funders, s.trend, s.any], [4, 5, ['NIH', 'NSF'], 'rising', true])
+  assert.equal(outputTrend(2, 10), 'declining')
+  assert.equal(outputTrend(5, 5), 'steady')
+  assert.equal(outputTrend(2, 1), 'steady')
+  assert.equal(outputTrend(null, 5), null)
+})

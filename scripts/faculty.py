@@ -17,7 +17,7 @@ AUTHOR_SELECT = ",".join([
     "id", "display_name", "orcid", "works_count", "cited_by_count", "summary_stats",
     "last_known_institutions", "topics", "counts_by_year",
 ])
-WORK_SELECT = "id,title,display_name,publication_year,publication_date,authorships"
+WORK_SELECT = "id,title,display_name,publication_year,publication_date,authorships,funders"
 
 
 def compute_domains(topics):
@@ -64,7 +64,59 @@ def publication_entry(work, author_id=None):
     position = author_position(work, author_id) if author_id else None
     if position:
         entry["position"] = position  # first author did the work; last author usually leads the group
+    if position == "last":
+        first = next((short_id((a.get("author") or {}).get("id")) for a in work.get("authorships") or []
+                      if a.get("author_position") == "first"), None)
+        if first and first != author_id:
+            entry["_fa"] = first
+    funders = [(f.get("display_name") or "").strip()[:60] for f in work.get("funders") or [] if isinstance(f, dict)]
+    funders = [f for f in funders if f][:2]
+    if funders:
+        entry["_funders"] = funders
     return entry
+
+
+def strip_transient(pubs):
+    """Drop the underscore-prefixed working keys (_fa, _funders) before publications are written."""
+    return [{k: v for k, v in p.items() if not k.startswith("_")} for p in pubs]
+
+
+def lab_signals(pubs):
+    """-> {"lab_first_authors": distinct first authors on the person's last-author papers (None when none),
+    "lab_senior_papers": how many such papers, "recent_funders": top 3 funders}. Needs the transient keys."""
+    last = [p for p in pubs if p.get("position") == "last"]
+    first_authors = {p["_fa"] for p in last if p.get("_fa")}
+    counts = defaultdict(int)
+    for p in pubs:
+        for name in p.get("_funders") or []:
+            counts[name] += 1
+    funders = [n for n, _ in sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))[:3]]
+    signals = {}
+    if first_authors:
+        signals["lab_first_authors"], signals["lab_senior_papers"] = len(first_authors), len(last)
+    if funders:
+        signals["recent_funders"] = funders
+    return signals
+
+
+def apply_lab_signals(record, pubs):
+    """Set lab signals from `pubs`; on a CDC merge keep the larger lab count and the union of funders."""
+    new = lab_signals(pubs)
+    if "lab_first_authors" in new and new["lab_first_authors"] >= (record.get("lab_first_authors") or 0):
+        record["lab_first_authors"], record["lab_senior_papers"] = new["lab_first_authors"], new["lab_senior_papers"]
+    funders = list(dict.fromkeys(new.get("recent_funders", []) + (record.get("recent_funders") or [])))[:3]
+    if funders:
+        record["recent_funders"] = funders
+
+
+def output_counts(author, this_year=None):
+    """-> {"works_recent_3y", "works_prior_3y"} from counts_by_year: the three full years before this one vs the three before those."""
+    this_year = this_year or date.today().year
+    by_year = {c.get("year"): c.get("works_count") or 0 for c in author.get("counts_by_year") or []}
+    if not by_year:
+        return {}
+    return {"works_recent_3y": sum(by_year.get(this_year - n, 0) for n in (1, 2, 3)),
+            "works_prior_3y": sum(by_year.get(this_year - n, 0) for n in (4, 5, 6))}
 
 
 def last_publication_year(author):
@@ -106,6 +158,9 @@ def merge_publications(existing, new_entries, limit=MAX_RECENT_PUBLICATIONS):
         kept = by_key.setdefault(key, pub)
         if pub.get("position") and not kept.get("position"):
             kept["position"] = pub["position"]  # backfill the role on records built before it existed
+        for key in ("_fa", "_funders"):
+            if pub.get(key) and not kept.get(key):
+                kept[key] = pub[key]
     ordered = sorted(by_key.values(), key=lambda p: (p.get("date") or f"{p.get('year') or 0}-00-00"), reverse=True)
     return ordered[:limit]
 
@@ -387,6 +442,8 @@ def write_records(records, universities, data_dir, combined_limit=COMBINED_LIMIT
     -> {"pruned", "faculty_count", "search_index_rows", "search_index_complete"}
     """
     for record in records:
+        if any(k.startswith("_") for p in record.get("recent_publications") or [] for k in p):
+            record["recent_publications"] = strip_transient(record["recent_publications"])
         (record["first_author_recent"], record["last_author_recent"],
          record["recent_works"], record["seniority_score"]) = role_signals(record)
     records[:], pruned = prune_to_budget(records, budget_bytes)

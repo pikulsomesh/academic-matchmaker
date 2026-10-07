@@ -124,6 +124,27 @@ detail), `recent_works` (how many of those up to 5 papers have a known position)
 are known. It is recomputed on every write, so a monthly update fills it in for older data. It only
 orders and badges people; nobody is dropped.
 
+## Lab signals
+
+Full records (not the search rows) also carry, when OpenAlex has the data: `lab_first_authors` and
+`lab_senior_papers` (distinct first authors on the person's recent last-author papers, out of how
+many such papers), `recent_funders` (up to 3, from the works' `funders`) and `works_recent_3y` /
+`works_prior_3y` (papers in the three full years before this one vs the three before those, from
+`counts_by_year`). Working keys `_fa` and `_funders` on publications feed this and are stripped
+before writing. If OpenAlex rejects the optional `funders` field the client retries without it and
+carries on, so a renamed field can't break a build.
+
+## Quality gate and pipeline status
+
+`quality_gate.py snapshot` runs before a build and `quality_gate.py check` after the search index.
+`check` fails the run (so nothing is published or committed) when files are missing or unreadable,
+the search file has duplicate ids, counts or record files don't add up, the vector index doesn't
+match, the data is over its size budget, or a university (or the total) lost more than 20% of its
+people. Set the repository variable `QUALITY_ALLOW_SHRINK=1` for an intended shrink. On success it
+writes `pipeline_status.json` (generated and last-success time, people, size, per-university
+counts, warnings, run URL), which the site footer reads. A failed run opens or updates one
+`data-pipeline` issue, and the next good run closes it.
+
 ## Embedding format
 
 Every embeddings file (`embeddings/<id>.json` and `faculty_embeddings.json`) follows the contract read by `decodeEmbeddingIndex()` in `src/ai/vectors.js`:

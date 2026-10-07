@@ -8,6 +8,7 @@ import FacultyDetailModal from './components/FacultyDetailModal.jsx'
 import AboutModal from './components/AboutModal.jsx'
 import CopyLinkButton from './components/CopyLinkButton.jsx'
 import ShortlistModal from './components/ShortlistModal.jsx'
+import { loadPipelineStatus } from './data/facultyStore.js'
 import useFacultySearch, { SORTS } from './hooks/useFacultySearch.js'
 import useLocalAI from './hooks/useLocalAI.js'
 import useMatcherBridge from './hooks/useMatcherBridge.js'
@@ -45,6 +46,10 @@ export default function App() {
   const coverageNote = coverageMessage(coverage, filtered, matchScores ? ai.matchScope : null)
 
   const shortlist = useShortlist()
+  const [dataStatus, setDataStatus] = useState(null)
+  useEffect(() => {
+    loadPipelineStatus().then(setDataStatus)
+  }, [])
   const [selected, setSelected] = useState(null)
   const [aboutOpen, setAboutOpen] = useState(false)
   const [shortlistOpen, setShortlistOpen] = useState(false)
@@ -256,6 +261,15 @@ export default function App() {
             Read the full disclaimer
           </button>
           .
+          {dataStatus?.last_success_at && (
+            <p className="mt-1">
+              Data updated {new Date(dataStatus.last_success_at).toLocaleDateString(undefined, { dateStyle: 'medium' })}
+              {dataStatus.people ? `, ${dataStatus.people.toLocaleString()} researchers` : ''}.{' '}
+              <a href={dataStatus.url} target="_blank" rel="noreferrer" className="font-medium text-cardinal hover:underline">
+                Pipeline status
+              </a>
+            </p>
+          )}
         </div>
       </footer>
 
