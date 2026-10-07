@@ -11,11 +11,12 @@ Python 3.10+. `pip install -r scripts/requirements.txt`
 `.github/workflows/monthly-cdc-update.yml` (`scripts/plan_run.py` decides what each run does):
 
 - **Monthly** (00:00 UTC on the 1st): `cdc_update.py` + `build_search_index.py`, commit `public/data/`, start `deploy.yml`.
-- **Daily** (02:00 UTC): grows coverage toward `scripts/config/coverage.json` → `target_per_institution`
-  (1000). It runs a full build only when the first full build exists, the published index was built
-  with a smaller cap (`metadata.json` → `per_institution`), and the website reads the per-university
-  files (`src/` references `faculty_search.json`). Otherwise it skips in seconds.
-- **Manual**: Actions tab → Run workflow, with **mode = full** for the first build.
+- **Daily** (02:00 UTC), and on merges that change `scripts/plan_run.py` or `scripts/config/coverage.json`:
+  if no real data is published yet, a first full build at `initial_per_institution` (200). After that,
+  it grows coverage toward `target_per_institution` (1000) while the published index was built with a
+  smaller cap (`metadata.json` → `per_institution`) and the website reads the per-university files
+  (`src/` references `faculty_search.json`). Otherwise it skips in seconds.
+- **Manual**: Actions tab → Run workflow, for a CDC or full run whenever you like.
 
 Full builds stop themselves after 270 minutes or when OpenAlex's daily budget runs out (exit code 75,
 shown as a "paused" notice). Progress stays cached and the next run, daily or manual, resumes it.

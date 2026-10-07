@@ -3,9 +3,10 @@
 
   manual run       -> whatever mode / per_institution was picked in the form
   monthly schedule -> cdc
-  daily schedule   -> full at the coverage target, while the published index is smaller
-                      than the target and the website can read per-university files;
-                      otherwise skip (finishes in seconds)
+  daily schedule,  -> no data published yet: a first full build at initial_per_institution;
+  or a push that      then a full build at target_per_institution while the published index
+  changes this file   is smaller and the website reads per-university files; otherwise skip
+  or coverage.json    (finishes in seconds)
 
 The daily build resumes from the previous day's cache, so a build too big for one day of
 OpenAlex budget or one job's time limit completes over several days without anyone clicking.
@@ -52,7 +53,9 @@ def plan(event, schedule, mode_input, per_institution_input, metadata, coverage,
     if schedule == MONTHLY_CRON:
         return "cdc", target, "monthly update"
     if not metadata.get("last_ingestion"):
-        return "skip", target, "waiting for the first full build to be run by hand"
+        # No real data published yet: a quick first build, so the site has data within a day.
+        initial = int(coverage.get("initial_per_institution", 200))
+        return "full", initial, f"first full build at {initial} per institution"
     built = int(metadata.get("per_institution") or 200)
     if built >= target:
         return "skip", target, f"index already built at {built} per institution"
