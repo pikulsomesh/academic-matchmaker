@@ -24,6 +24,11 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+        env:
+          # onnxruntime-node (a transformers.js dependency used only in Node)
+          # downloads native binaries the browser build never needs.
+          ONNXRUNTIME_NODE_INSTALL: skip
+      - run: npm test
       - run: npm run build
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3

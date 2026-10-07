@@ -7,6 +7,6 @@ export default defineConfig({
   plugins: [react()],
   base: './',
   optimizeDeps: {
-    exclude: ['@xenova/transformers'],
+    exclude: ['@huggingface/transformers'],
   },
 })
