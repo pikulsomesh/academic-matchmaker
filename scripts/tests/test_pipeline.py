@@ -116,7 +116,7 @@ class FakeEncoder:
 
 
 class PlanTests(unittest.TestCase):
-    COVERAGE = {"target_per_institution": 1000}
+    COVERAGE = {"initial_per_institution": 200, "target_per_institution": 1000}
     BUILT = {"last_ingestion": "2026-10-07", "per_institution": 200}
 
     def plan(self, event="schedule", schedule="0 2 * * *", metadata=None, shards_ready=True, mode="", per=""):
@@ -126,7 +126,8 @@ class PlanTests(unittest.TestCase):
     def test_daily_expands_only_when_safe(self):
         self.assertEqual(self.plan(), ("full", 1000))
         self.assertEqual(self.plan(shards_ready=False)[0], "skip", "site still reads the single file")
-        self.assertEqual(self.plan(metadata={})[0], "skip", "no first build yet")
+        self.assertEqual(self.plan(metadata={}), ("full", 200), "first build starts on its own")
+        self.assertEqual(self.plan(event="push", schedule="", metadata={}), ("full", 200))
         self.assertEqual(self.plan(metadata={"last_ingestion": "x", "per_institution": 1000})[0], "skip", "done")
 
     def test_monthly_and_manual(self):

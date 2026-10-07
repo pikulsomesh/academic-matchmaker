@@ -4,6 +4,10 @@ on:
   schedule:
     - cron: '0 0 1 * *'   # monthly CDC update
     - cron: '0 2 * * *'   # daily: continue expanding coverage while scripts/config/coverage.json asks for more
+  # Merging a change to the build plan or coverage target starts a run right away.
+  push:
+    branches: [main]
+    paths: [scripts/plan_run.py, scripts/config/coverage.json]
   workflow_dispatch:
     inputs:
       mode:
@@ -39,8 +43,7 @@ jobs:
           cache: pip
           cache-dependency-path: scripts/requirements.txt
 
-      # Decides full / cdc / skip; see scripts/plan_run.py. The daily schedule only builds
-      # once the first full build exists and the website reads per-university files.
+      # Decides full / cdc / skip; see scripts/plan_run.py.
       - name: Plan
         id: plan
         run: >
