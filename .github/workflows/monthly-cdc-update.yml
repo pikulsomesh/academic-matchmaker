@@ -1,0 +1,90 @@
+name: Monthly data update
+
+on:
+  schedule:
+    - cron: '0 0 1 * *'
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "cdc = add works published since the last run; full = rebuild the whole index"
+        type: choice
+        options: [cdc, full]
+        default: cdc
+      per_institution:
+        description: "full mode only: max faculty per institution"
+        default: "200"
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: data-update
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 340
+    env:
+      OPENALEX_MAILTO: ${{ vars.OPENALEX_MAILTO }}
+      OPENALEX_API_KEY: ${{ secrets.OPENALEX_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: scripts/requirements.txt
+
+      - run: pip install -r scripts/requirements.txt
+
+      - name: Cache embedding model
+        uses: actions/cache@v4
+        with:
+          path: .cache/models
+          key: minilm-l6-v2-quantized
+
+      # A full run that hits the time limit can be re-run and resumes from this cache.
+      - name: Cache ingestion responses
+        if: inputs.mode == 'full'
+        uses: actions/cache@v4
+        with:
+          path: .cache/ingestion
+          key: ingestion-${{ github.run_id }}
+          restore-keys: ingestion-
+
+      - name: Full ingestion
+        if: inputs.mode == 'full'
+        run: python scripts/initial_ingestion.py --per-institution "${{ inputs.per_institution }}"
+
+      - name: Monthly CDC update
+        if: inputs.mode != 'full'
+        run: python scripts/cdc_update.py
+
+      - name: Build search index
+        run: python scripts/build_search_index.py
+
+      - name: Commit updated data
+        id: commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add public/data scripts/config
+          if git diff --cached --quiet; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "No data changes."
+          else
+            git commit -m "data: ${{ inputs.mode || 'cdc' }} update $(date -u +%Y-%m-%d)"
+            git push
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Pushes made with GITHUB_TOKEN do not trigger other workflows, so start the
+      # Pages deployment explicitly (workflow_dispatch is the documented exception).
+      - name: Redeploy site
+        if: steps.commit.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run deploy.yml --ref "${{ github.ref_name }}"
