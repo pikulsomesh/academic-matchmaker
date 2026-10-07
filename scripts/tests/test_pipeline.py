@@ -72,9 +72,14 @@ class FakeOpenAlex(OpenAlexClient):
             return {"results": [self.refreshed.get(i) or a for a in self.authors
                                 for i in [a["id"].rsplit("/", 1)[-1]] if i in ids]}
         if path == "works" and flt.startswith("author.id:"):
-            aid = flt.split(",")[0].split(":", 1)[1]
-            mine = [w for w in self.works if any(x["author"]["id"].endswith(aid) for x in w["authorships"])]
-            return {"results": sorted(mine, key=lambda w: w["publication_date"], reverse=True)[: params.get("per-page", 5)]}
+            ids = set(flt.split(",")[0].split(":", 1)[1].split("|"))
+            since = flt.split("from_publication_date:")[1].split(",")[0] if "from_publication_date" in flt else ""
+            mine = sorted((w for w in self.works if w["publication_date"] >= since
+                           and any(x["author"]["id"].rsplit("/", 1)[-1] in ids for x in w["authorships"])),
+                          key=lambda w: w["publication_date"], reverse=True)
+            if "cursor" in params:
+                return self._page(mine, params)
+            return {"results": mine[: params.get("per-page", 5)]}
         if path == "works" and flt.startswith("authorships.institutions.id"):
             since = flt.split("from_publication_date:")[1].split(",")[0]
             return self._page([w for w in self.works if w["publication_date"] >= since], params)
@@ -155,6 +160,17 @@ class DomainTests(unittest.TestCase):
         self.assertEqual([p["id"] for p in merged], ["W2", "W1"])
 
 
+class BatchedWorksTests(unittest.TestCase):
+    def test_full_authors_skip_fallback(self):
+        works = [work(f"W{i}", f"Paper {i}", f"2026-0{i}-01", ["A1", "A2"]) for i in range(1, 7)]
+        client = FakeOpenAlex([], works)
+        cache = initial_ingestion.Cache("", enabled=False)
+        result = initial_ingestion.fetch_recent_works_batched(client, cache, ["A1", "A2"])
+        self.assertEqual([p["id"] for p in result["A1"]], ["W6", "W5", "W4", "W3", "W2"])
+        self.assertTrue(all("A1|A2" in p["filter"] for _, p in client.calls), "no per-author fallback queries")
+        self.assertEqual(len(client.calls), 3, "stops paging once every author has enough works")
+
+
 class PipelineTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
@@ -215,6 +231,8 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(jane["institution"], {"id": "I63966007", "name": "Massachusetts Institute of Technology",
                                                "country_code": "US", "rank": 1})
         self.assertEqual(jane["recent_publications"][0]["title"], "Autonomous Discovery of Battery Electrolytes")
+        batched = [p["filter"] for path, p in client.calls if path == "works" and "|" in p.get("filter", "")]
+        self.assertTrue(batched and batched[0].startswith("author.id:A1|A2|A3"), "recent works fetched in one OR query")
 
         unis = json.loads(pathlib.Path(self.tmp, "universities.json").read_text())
         self.assertEqual(unis[0]["id"], "I63966007", "skips the hospital that also matched the search")

@@ -24,7 +24,7 @@ import json
 import os
 import sys
 from concurrent.futures import ThreadPoolExecutor
-from datetime import date
+from datetime import date, timedelta
 from urllib.parse import urlparse
 
 import requests
@@ -33,7 +33,7 @@ import contacts
 from faculty import (AUTHOR_SELECT, DATA_DIR, MAX_RECENT_PUBLICATIONS, WORK_SELECT, compute_domains,
                      contact_flags, merge_publications, now_iso, publication_entry, read_json, today_iso,
                      verification_rank, write_domains, write_faculty_index, write_json)
-from openalex import OpenAlexClient, RateLimiter, short_id
+from openalex import OpenAlexClient, RateLimiter, chunks, short_id
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CONFIG_PATH = os.path.join(ROOT, "scripts", "config", "top100_qs2026.json")
@@ -142,6 +142,48 @@ def fetch_authors(client, cache, inst_id, args):
 
 
 # --- step 3: recent works --------------------------------------------------------------
+
+def fetch_recent_works_batched(client, cache, author_ids, batch_size=25, months=18, max_pages=5):
+    """Recent works for many authors with few requests (OpenAlex bills per request).
+
+    One OR-filtered query per batch of authors, newest first; authors still short of
+    MAX_RECENT_PUBLICATIONS after `max_pages` pages fall back to a per-author query.
+    """
+    result = {}
+    todo = []
+    for author_id in author_ids:
+        cached = cache.get("works", author_id)
+        if cached is not None:
+            result[author_id] = cached
+        else:
+            todo.append(author_id)
+    since = (date.today() - timedelta(days=months * 30)).isoformat()
+    for batch in chunks(todo, batch_size):
+        wanted = set(batch)
+        found = {a: [] for a in batch}
+        params = {
+            "filter": f"author.id:{'|'.join(batch)},from_publication_date:{since},to_publication_date:{today_iso()}",
+            "sort": "publication_date:desc",
+            "select": WORK_SELECT,
+        }
+        for work in client.iterate("works", params, max_results=200 * max_pages):
+            entry = publication_entry(work)
+            if not entry["title"]:
+                continue
+            for authorship in work.get("authorships") or []:
+                aid = short_id((authorship.get("author") or {}).get("id"))
+                if aid in wanted and len(found[aid]) < MAX_RECENT_PUBLICATIONS:
+                    found[aid].append(entry)
+            if all(len(v) >= MAX_RECENT_PUBLICATIONS for v in found.values()):
+                break
+        for aid, pubs in found.items():
+            if len(pubs) >= MAX_RECENT_PUBLICATIONS:
+                result[aid] = cache.put("works", aid, pubs)
+    for author_id in author_ids:
+        if author_id not in result:
+            result[author_id] = fetch_recent_works(client, cache, author_id)
+    return result
+
 
 def fetch_recent_works(client, cache, author_id):
     cached = cache.get("works", author_id)
@@ -333,8 +375,10 @@ def main(argv=None, client=None, web=None):
 
         authors = fetch_authors(client, cache, short_id(inst["id"]), args)
 
+        recent_by_author = fetch_recent_works_batched(client, cache, [short_id(a["id"]) for a in authors])
+
         def process(author):
-            recent = fetch_recent_works(client, cache, short_id(author["id"]))
+            recent = recent_by_author[short_id(author["id"])]
             found = find_contacts(author, uni, domains, directory_index, web, cache, args)
             return build_record(author, uni, inst, recent, found)
 
