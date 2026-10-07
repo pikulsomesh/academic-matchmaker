@@ -126,11 +126,13 @@ def main(argv=None):
     out = os.environ.get("GITHUB_OUTPUT")
     coverage = read_json(COVERAGE_CONFIG)
     tier = tier_for(coverage, per_institution)
+    shards = max(1, int(coverage.get("ingest_shards", 50)))
     lines = (f"mode={mode}\nper_institution={per_institution}\n"
              f"min_works={tier.get('min_works', 20)}\nmin_citations={tier.get('min_citations', 500)}\n"
              f"min_h_index={tier.get('min_h_index', 10)}\nwindow_years={coverage.get('window_years', 10)}\n"
              f"size_budget_mb={budget_mb(coverage, bool(os.environ.get('HF_DATASET_REPO')))}\n"
-             f"search_index_rows={coverage.get('search_index_rows', 100000)}\n")
+             f"search_index_rows={coverage.get('search_index_rows', 100000)}\n"
+             f"shards={shards}\nshard_list={json.dumps(list(range(shards)))}\n")
     if out:
         with open(out, "a", encoding="utf-8") as fh:
             fh.write(lines)

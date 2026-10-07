@@ -18,9 +18,12 @@ Python 3.10+. `pip install -r scripts/requirements.txt`
   (`src/` references `faculty_search.json`). Otherwise it skips in seconds.
 - **Manual**: Actions tab → Run workflow, for a CDC or full run whenever you like.
 
-Full builds stop themselves after 270 minutes or when OpenAlex's daily budget runs out (exit code 75,
-shown as a "paused" notice). Progress stays cached and the next run, daily or manual, resumes it.
-Nothing is committed until a build finishes.
+A full build runs as parallel jobs (`ingest_shards` in `config/coverage.json`, 50, at most 20 at a time),
+each on its own few universities with its own cache; `assemble.py` merges their results and only then is
+anything published. A shard that hits its time budget (270 minutes, with a hard stop 10 minutes later in case a
+request hangs) or OpenAlex's daily limit ends as "paused" with its progress cached; nothing is published and the
+next run, daily or manual, finishes it. A shard that fails for another reason stops the run without publishing. OpenAlex limits apply per key, so each of the
+20 parallel jobs asks for 0.5 requests a second (about 10 a second in total); a 429 pauses the shard.
 
 Set the repository secret `OPENALEX_API_KEY` (free at openalex.org/settings/api). OpenAlex bills
 per request: without a key the daily budget is about 1,000 list calls, with a free key about

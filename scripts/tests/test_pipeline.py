@@ -15,6 +15,7 @@ import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import build_search_index  # noqa: E402
+import assemble  # noqa: E402
 import cdc_update  # noqa: E402
 import contacts  # noqa: E402
 import plan_run  # noqa: E402
@@ -479,6 +480,27 @@ class PipelineTests(unittest.TestCase):
         records = initial_ingestion.main(["--config", self.config, "--out-dir", self.tmp, "--per-institution", "10"],
                                          client=client, web=self.web)
         return records, client
+
+    def test_parallel_shards_match_a_single_run(self):
+        records, _ = self.ingest()
+        single = sorted((r["id"], r["email"], r["title"]) for r in records)
+        parts = os.path.join(self.tmp, "parts")
+        for i in (0, 1):
+            initial_ingestion.main(["--config", self.config, "--out-dir", os.path.join(self.tmp, "x"),
+                                    "--per-institution", "10", "--shard", f"{i}/2",
+                                    "--partial-out", os.path.join(parts, f"s{i}", f"partial-{i}.json")],
+                                   client=FakeOpenAlex(self.authors, self.works), web=self.web)
+        out = os.path.join(self.tmp, "assembled")
+        with self.assertRaises(SystemExit) as paused:  # one shard missing -> paused, nothing written
+            assemble.main(["--partials", parts, "--expect", "3", "--config", self.config, "--out-dir", out,
+                           "--per-institution", "10"])
+        self.assertEqual(paused.exception.code, initial_ingestion.EXIT_PAUSED)
+        self.assertFalse(os.path.exists(os.path.join(out, "universities.json")))
+        assemble.main(["--partials", parts, "--expect", "2", "--config", self.config, "--out-dir", out,
+                       "--per-institution", "10"])
+        merged, _ = faculty.load_records(out)
+        self.assertEqual(sorted((r["id"], r["email"], r["title"]) for r in merged), single)
+        self.assertEqual(json.loads(pathlib.Path(out, "metadata.json").read_text())["faculty_count"], 3)
 
     def test_ingestion_schema_and_contacts(self):
         records, client = self.ingest()

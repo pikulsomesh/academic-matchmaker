@@ -23,6 +23,7 @@ import hashlib
 import json
 import os
 import sys
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date, timedelta
@@ -207,7 +208,9 @@ class Web:
         self.session.headers.update(PAGE_HEADERS)
         self.limiter = RateLimiter(per_second)
 
-    def get_text(self, url, headers=None, timeout=20):
+    def get_text(self, url, headers=None, timeout=20, max_seconds=45):
+        """Page text, or None. `timeout` limits each socket wait; `max_seconds` caps the whole download so
+        a server that drips bytes cannot stall a worker thread forever."""
         self.limiter.wait()
         try:
             resp = self.session.get(url, headers=headers, timeout=timeout, stream=True)
@@ -216,8 +219,15 @@ class Web:
             ctype = resp.headers.get("Content-Type", "")
             if headers is None and "html" not in ctype and "text" not in ctype:
                 return None
-            body = resp.raw.read(MAX_PAGE_BYTES, decode_content=True)
-            return body.decode(resp.encoding or "utf-8", errors="replace")
+            stop = time.monotonic() + max_seconds
+            parts, size = [], 0
+            for chunk in resp.iter_content(chunk_size=16384):
+                parts.append(chunk)
+                size += len(chunk)
+                if size >= MAX_PAGE_BYTES or time.monotonic() > stop:
+                    break
+            resp.close()
+            return b"".join(parts)[:MAX_PAGE_BYTES].decode(resp.encoding or "utf-8", errors="replace")
         except (requests.RequestException, ValueError):
             return None
 
@@ -354,6 +364,12 @@ def parse_args(argv=None):
     p.add_argument("--skip-scrape", action="store_true", help="skip profile and directory page scraping")
     p.add_argument("--no-cache", action="store_true")
     p.add_argument("--workers", type=int, default=6)
+    p.add_argument("--shard", default=None, metavar="I/N",
+                   help="build only universities whose position in the list is I modulo N (parallel jobs)")
+    p.add_argument("--partial-out", default=None,
+                   help="write this shard's records to this file instead of the final data; assemble.py merges them")
+    p.add_argument("--openalex-per-second", type=float, default=8)
+    p.add_argument("--web-per-second", type=float, default=6)
     p.add_argument("--time-budget-minutes", type=float, default=None,
                    help="pause (exit 75, cache kept) once this much time has passed")
     return p.parse_args(argv)
@@ -366,8 +382,23 @@ class Paused(Exception):
     pass
 
 
+def start_watchdog(args):
+    """Hard stop: if the run is still going 10 minutes after its time budget (a hung request, say),
+    exit as paused. Everything done so far is already in the cache, so the next run resumes."""
+    if args.time_budget_minutes is None:
+        return None
+    def stop():
+        log("Paused: the time budget passed and the run did not stop on its own; stopping now. Progress is cached.")
+        os._exit(EXIT_PAUSED)
+    timer = threading.Timer(args.time_budget_minutes * 60 + 600, stop)
+    timer.daemon = True
+    timer.start()
+    return timer
+
+
 def main(argv=None, client=None, web=None):
     args = parse_args(argv)
+    watchdog = start_watchdog(args)
     try:
         return build(args, client, web)
     except Paused as exc:
@@ -378,17 +409,25 @@ def main(argv=None, client=None, web=None):
             log("Paused: OpenAlex daily budget used up. Progress is cached; run again tomorrow to resume.")
             raise SystemExit(EXIT_PAUSED)
         raise
+    finally:
+        if watchdog:
+            watchdog.cancel()
 
 
 def build(args, client=None, web=None):
     deadline = time.monotonic() + args.time_budget_minutes * 60 if args.time_budget_minutes is not None else None
     config = read_json(args.config)
-    client = client or OpenAlexClient()
-    web = web or Web()
+    client = client or OpenAlexClient(per_second=args.openalex_per_second)
+    web = web or Web(per_second=args.web_per_second)
     cache = Cache(CACHE_DIR, enabled=not args.no_cache)
     unis = config["universities"][: args.institutions] if args.institutions else config["universities"]
+    if args.shard:
+        index, count = (int(x) for x in args.shard.split("/"))
+        unis = [u for position, u in enumerate(unis) if position % count == index]
+        log(f"Shard {index}/{count}: {len(unis)} universities")
 
     universities, records = [], []
+    config_updates = {}
     config_changed = False
     for uni in unis:
         if deadline is not None and time.monotonic() >= deadline:
@@ -396,6 +435,7 @@ def build(args, client=None, web=None):
         inst = resolve_institution(client, cache, uni)
         if not uni.get("openalex_id"):
             uni["openalex_id"] = short_id(inst["id"])
+            config_updates[str(uni["rank"])] = uni["openalex_id"]
             config_changed = True
         domains = institution_domains(uni, inst)
         log(f"[{uni['rank']:>3}] {uni['name']} -> {inst['display_name']} ({short_id(inst['id'])}, {', '.join(sorted(domains)) or 'no domain'})")
@@ -434,11 +474,28 @@ def build(args, client=None, web=None):
             "faculty_count": len(inst_records),
         })
 
+    if args.partial_out:
+        write_json(args.partial_out, {"universities": universities, "records": records,
+                                      "config_updates": config_updates, "openalex_requests": client.request_count},
+                   compact=True)
+        log(f"Wrote partial result: {len(records)} faculty from {len(universities)} institutions "
+            f"using {client.request_count} OpenAlex requests.")
+        return records
+
+    records = finalize(records, universities, args, config.get("source"), client.request_count)
+    if config_changed and args.config == CONFIG_PATH and not args.institutions:
+        write_json(args.config, config)
+    return records
+
+
+def finalize(records, universities, args, ranking_source, openalex_requests):
+    """Merge duplicates, write all data files and metadata.json. -> the final record list."""
     # Faculty who list two tracked institutions appear once, under the better-ranked one.
     unique = {}
     for record in records:
         unique.setdefault(record["id"], record)
     records = sorted(unique.values(), key=lambda r: (verification_rank(r), r["institution"]["rank"], -r["citation_count"]))
+    universities = sorted(universities, key=lambda u: u["rank"])
 
     stats = write_records(records, universities, args.out_dir,
                           budget_bytes=int(args.size_budget_mb * 1e6) if args.size_budget_mb else None,
@@ -448,7 +505,7 @@ def build(args, client=None, web=None):
         "generated_at": now_iso(),
         "last_ingestion": today_iso(),
         "last_cdc_run": today_iso(),
-        "ranking_source": config.get("source"),
+        "ranking_source": ranking_source,
         "faculty_count": len(records),
         "per_institution": args.per_institution,
         "window_years": args.window_years,
@@ -459,12 +516,10 @@ def build(args, client=None, web=None):
         "search_index_complete": stats["search_index_complete"],
         "faculty_with_email": with_email,
         "institution_count": len(universities),
-        "openalex_requests": client.request_count,
+        "openalex_requests": openalex_requests,
     })
-    if config_changed and args.config == CONFIG_PATH and not args.institutions:
-        write_json(args.config, config)
     log(f"Wrote {len(records)} faculty ({with_email} with email) from {len(universities)} institutions "
-        f"using {client.request_count} OpenAlex requests.")
+        f"using {openalex_requests} OpenAlex requests.")
     return records
 
 
