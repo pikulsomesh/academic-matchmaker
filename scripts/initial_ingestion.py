@@ -227,7 +227,11 @@ class Web:
                 if size >= MAX_PAGE_BYTES or time.monotonic() > stop:
                     break
             resp.close()
-            return b"".join(parts)[:MAX_PAGE_BYTES].decode(resp.encoding or "utf-8", errors="replace")
+            raw = b"".join(parts)[:MAX_PAGE_BYTES]
+            try:
+                return raw.decode(resp.encoding or "utf-8", errors="replace")
+            except LookupError:  # a server sent a charset Python does not know (e.g. "ISO-8859-1.")
+                return raw.decode("utf-8", errors="replace")
         except (requests.RequestException, ValueError):
             return None
 
