@@ -330,6 +330,24 @@ class ChunkAndVectorTests(unittest.TestCase):
             shutil.rmtree(d)
 
 
+class WebDecodeTests(unittest.TestCase):
+    def test_unknown_charset_in_header_does_not_crash(self):
+        class Resp:
+            status_code = 200
+            headers = {"Content-Type": "text/html; charset=ISO-8859-1."}
+            encoding = "ISO-8859-1."
+
+            def iter_content(self, chunk_size=0):
+                yield "caf\u00e9 page".encode("utf-8")
+
+            def close(self):
+                pass
+
+        web = initial_ingestion.Web(per_second=1000)
+        with mock.patch.object(web.session, "get", return_value=Resp()):
+            self.assertEqual(web.get_text("https://example.edu/p"), "caf\u00e9 page")
+
+
 class PauseTests(unittest.TestCase):
     def test_time_budget_pauses_with_exit_75(self):
         tmp = tempfile.mkdtemp()
