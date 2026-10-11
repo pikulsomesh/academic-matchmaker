@@ -35,7 +35,7 @@ import contacts
 from faculty import (AUTHOR_SELECT, DATA_DIR, apply_lab_signals, output_counts, MAX_RECENT_PUBLICATIONS, WORK_SELECT, compute_domains,
                      contact_flags, merge_publications, now_iso, publication_entry, read_json, today_iso,
                      verification_rank, write_json, write_records, last_publication_year)
-from openalex import OpenAlexClient, RateLimited, RateLimiter, chunks, short_id
+from openalex import OpenAlexClient, RateLimited, RateLimiter, RequestCapReached, chunks, short_id
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CONFIG_PATH = os.path.join(ROOT, "scripts", "config", "top100_qs2026.json")
@@ -376,6 +376,8 @@ def parse_args(argv=None):
                    help="write this shard's records to this file instead of the final data; assemble.py merges them")
     p.add_argument("--openalex-per-second", type=float, default=8)
     p.add_argument("--web-per-second", type=float, default=6)
+    p.add_argument("--max-openalex-requests", type=int, default=None,
+                   help="pause (exit 75, cache kept) after this many OpenAlex requests: this run's share of the daily budget")
     p.add_argument("--time-budget-minutes", type=float, default=None,
                    help="pause (exit 75, cache kept) once this much time has passed")
     return p.parse_args(argv)
@@ -419,6 +421,9 @@ def main(argv=None, client=None, web=None):
     except Paused as exc:
         log(f"Paused: {exc}. Progress is cached; run again to resume.")
         raise SystemExit(EXIT_PAUSED)
+    except RequestCapReached as exc:
+        log(f"Paused: {exc}, this run's share of the daily OpenAlex budget. Progress is cached; run again tomorrow to resume.")
+        raise SystemExit(EXIT_PAUSED)
     except RateLimited as exc:
         log(f"Paused: OpenAlex asked us to wait {exc.retry_after:.0f}s (HTTP {exc.status}), so its budget is used up. "
             "Progress is cached; run again later to resume.")
@@ -436,7 +441,7 @@ def main(argv=None, client=None, web=None):
 def build(args, client=None, web=None):
     deadline = time.monotonic() + args.time_budget_minutes * 60 if args.time_budget_minutes is not None else None
     config = read_json(args.config)
-    client = client or OpenAlexClient(per_second=args.openalex_per_second)
+    client = client or OpenAlexClient(per_second=args.openalex_per_second, max_requests=args.max_openalex_requests)
     start_heartbeat(client)
     web = web or Web(per_second=args.web_per_second)
     cache = Cache(CACHE_DIR, enabled=not args.no_cache)

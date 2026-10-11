@@ -22,7 +22,7 @@ import plan_run  # noqa: E402
 import initial_ingestion  # noqa: E402
 import faculty  # noqa: E402
 from faculty import compute_domains, merge_publications  # noqa: E402
-from openalex import OpenAlexClient, RateLimited  # noqa: E402
+from openalex import OpenAlexClient, RateLimited, RequestCapReached  # noqa: E402
 
 TOPICS_A = [
     {"display_name": "Battery materials", "count": 40,
@@ -384,6 +384,39 @@ class RateLimitTests(unittest.TestCase):
             with self.assertRaises(AssertionError):
                 client.get("authors", retries=2)
         sleep.assert_called_with(2.0)
+
+
+class RequestCapTests(unittest.TestCase):
+    def test_client_stops_at_its_request_cap(self):
+        class Resp:
+            status_code = 200
+
+            def json(self):
+                return {"results": []}
+
+        client = OpenAlexClient(per_second=1000, max_requests=2)
+        client.session = mock.Mock()
+        client.session.get.return_value = Resp()
+        client.get("authors")
+        client.get("authors")
+        with self.assertRaises(RequestCapReached):
+            client.get("authors")
+        self.assertEqual(client.session.get.call_count, 2)
+
+    def test_ingestion_pauses_with_exit_75_at_the_cap(self):
+        tmp = tempfile.mkdtemp()
+        try:
+            config = os.path.join(tmp, "c.json")
+            pathlib.Path(config).write_text(json.dumps({"universities": [
+                {"rank": 1, "name": "MIT", "country_code": "US", "openalex_id": None}]}))
+            with mock.patch("initial_ingestion.OpenAlexClient") as cls:
+                cls.return_value.get.side_effect = RequestCapReached("1 OpenAlex requests made")
+                with self.assertRaises(SystemExit) as ctx:
+                    initial_ingestion.main(["--config", config, "--out-dir", tmp, "--max-openalex-requests", "1", "--no-cache"],
+                                           web=FakeWeb({}))
+            self.assertEqual(ctx.exception.code, initial_ingestion.EXIT_PAUSED)
+        finally:
+            shutil.rmtree(tmp)
 
 
 class PauseTests(unittest.TestCase):

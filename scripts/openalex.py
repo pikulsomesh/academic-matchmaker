@@ -35,6 +35,10 @@ class RateLimited(Exception):
         self.status = status
 
 
+class RequestCapReached(Exception):
+    """The run used its allowance of OpenAlex requests (a share of the daily budget)."""
+
+
 def chunks(items, size):
     for i in range(0, len(items), size):
         yield items[i:i + size]
@@ -56,12 +60,13 @@ class RateLimiter:
 
 
 class OpenAlexClient:
-    def __init__(self, mailto=None, api_key=None, per_second=8, session=None):
+    def __init__(self, mailto=None, api_key=None, per_second=8, session=None, max_requests=None):
         self.mailto = mailto if mailto is not None else os.environ.get("OPENALEX_MAILTO")
         self.api_key = api_key if api_key is not None else os.environ.get("OPENALEX_API_KEY")
         self.limiter = RateLimiter(per_second)
         self.session = session or requests.Session()
         self.session.headers["User-Agent"] = USER_AGENT
+        self.max_requests = max_requests
         self.request_count = 0
         self.status_counts = {}
         self.dropped_fields = set()
@@ -75,6 +80,8 @@ class OpenAlexClient:
             params["api_key"] = self.api_key
         url = path if path.startswith("http") else f"{BASE_URL}/{path.lstrip('/')}"
         for attempt in range(retries):
+            if self.max_requests is not None and self.request_count >= self.max_requests:
+                raise RequestCapReached(f"{self.request_count} OpenAlex requests made")
             self.limiter.wait()
             self.request_count += 1
             try:
