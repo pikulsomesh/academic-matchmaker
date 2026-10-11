@@ -22,7 +22,7 @@ import plan_run  # noqa: E402
 import initial_ingestion  # noqa: E402
 import faculty  # noqa: E402
 from faculty import compute_domains, merge_publications  # noqa: E402
-from openalex import OpenAlexClient  # noqa: E402
+from openalex import OpenAlexClient, RateLimited  # noqa: E402
 
 TOPICS_A = [
     {"display_name": "Battery materials", "count": 40,
@@ -346,6 +346,37 @@ class WebDecodeTests(unittest.TestCase):
         web = initial_ingestion.Web(per_second=1000)
         with mock.patch.object(web.session, "get", return_value=Resp()):
             self.assertEqual(web.get_text("https://example.edu/p"), "caf\u00e9 page")
+
+
+class RateLimitTests(unittest.TestCase):
+    def _client(self, retry_after):
+        class Resp:
+            status_code = 429
+            headers = {"Retry-After": retry_after}
+
+            def raise_for_status(self):
+                raise AssertionError("should not get here")
+
+        client = OpenAlexClient(per_second=1000)
+        client.session = mock.Mock()
+        client.session.get.return_value = Resp()
+        client.limiter.wait = lambda: None
+        return client
+
+    def test_long_retry_after_pauses_instead_of_sleeping(self):
+        client = self._client("40000")
+        with mock.patch("openalex.time.sleep") as sleep:
+            with self.assertRaises(RateLimited):
+                client.get("authors")
+        sleep.assert_not_called()
+        self.assertEqual(client.status_counts, {429: 1})
+
+    def test_short_retry_after_is_waited_out(self):
+        client = self._client("2")
+        with mock.patch("openalex.time.sleep") as sleep:
+            with self.assertRaises(AssertionError):
+                client.get("authors", retries=2)
+        sleep.assert_called_with(2.0)
 
 
 class PauseTests(unittest.TestCase):

@@ -15,6 +15,7 @@ import requests
 BASE_URL = "https://api.openalex.org"
 USER_AGENT = "academic-matchmaker-pipeline/1.0 (+https://github.com/pikulsomesh/academic-matchmaker)"
 MAX_OR_VALUES = 100  # OpenAlex caps OR filters (a|b|c) at 100 values
+MAX_RETRY_WAIT = 300  # seconds; a longer Retry-After means the daily budget is gone, so stop instead of sleeping
 OPTIONAL_SELECT_FIELDS = ("funders",)  # nice-to-have fields: if OpenAlex rejects them, retry without
 
 
@@ -23,6 +24,15 @@ def short_id(openalex_id):
     if not openalex_id:
         return None
     return openalex_id.rstrip("/").rsplit("/", 1)[-1]
+
+
+class RateLimited(Exception):
+    """OpenAlex asked us to wait longer than is worth sleeping for (its daily budget is used up)."""
+
+    def __init__(self, retry_after, status):
+        super().__init__(f"OpenAlex answered {status} and asked to wait {retry_after:.0f}s")
+        self.retry_after = retry_after
+        self.status = status
 
 
 def chunks(items, size):
@@ -53,6 +63,7 @@ class OpenAlexClient:
         self.session = session or requests.Session()
         self.session.headers["User-Agent"] = USER_AGENT
         self.request_count = 0
+        self.status_counts = {}
         self.dropped_fields = set()
 
     def get(self, path, params=None, retries=5):
@@ -73,11 +84,15 @@ class OpenAlexClient:
                     raise
                 time.sleep(2 ** attempt)
                 continue
+            self.status_counts[resp.status_code] = self.status_counts.get(resp.status_code, 0) + 1
             if resp.status_code == 200:
                 return resp.json()
             if resp.status_code in (429, 500, 502, 503, 504) and attempt < retries - 1:
                 retry_after = resp.headers.get("Retry-After")
-                time.sleep(float(retry_after) if retry_after and retry_after.isdigit() else 2 ** (attempt + 1))
+                wait = float(retry_after) if retry_after and retry_after.isdigit() else 2 ** (attempt + 1)
+                if wait > MAX_RETRY_WAIT:
+                    raise RateLimited(wait, resp.status_code)
+                time.sleep(wait)
                 continue
             if resp.status_code == 400 and self._drop_optional(params):
                 continue

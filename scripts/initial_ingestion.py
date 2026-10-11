@@ -35,7 +35,7 @@ import contacts
 from faculty import (AUTHOR_SELECT, DATA_DIR, apply_lab_signals, output_counts, MAX_RECENT_PUBLICATIONS, WORK_SELECT, compute_domains,
                      contact_flags, merge_publications, now_iso, publication_entry, read_json, today_iso,
                      verification_rank, write_json, write_records, last_publication_year)
-from openalex import OpenAlexClient, RateLimiter, chunks, short_id
+from openalex import OpenAlexClient, RateLimited, RateLimiter, chunks, short_id
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CONFIG_PATH = os.path.join(ROOT, "scripts", "config", "top100_qs2026.json")
@@ -402,6 +402,15 @@ def start_watchdog(args):
     return timer
 
 
+def start_heartbeat(client, every=600):
+    """Log OpenAlex request counts every few minutes, so a stalled shard shows up in the job log."""
+    def beat():
+        while True:
+            time.sleep(every)
+            log(f"... still running: {getattr(client, "request_count", 0)} OpenAlex requests so far, by status {dict(getattr(client, "status_counts", {}))}")
+    threading.Thread(target=beat, daemon=True).start()
+
+
 def main(argv=None, client=None, web=None):
     args = parse_args(argv)
     watchdog = start_watchdog(args)
@@ -409,6 +418,10 @@ def main(argv=None, client=None, web=None):
         return build(args, client, web)
     except Paused as exc:
         log(f"Paused: {exc}. Progress is cached; run again to resume.")
+        raise SystemExit(EXIT_PAUSED)
+    except RateLimited as exc:
+        log(f"Paused: OpenAlex asked us to wait {exc.retry_after:.0f}s (HTTP {exc.status}), so its budget is used up. "
+            "Progress is cached; run again later to resume.")
         raise SystemExit(EXIT_PAUSED)
     except requests.HTTPError as exc:
         if exc.response is not None and exc.response.status_code == 429:
@@ -424,6 +437,7 @@ def build(args, client=None, web=None):
     deadline = time.monotonic() + args.time_budget_minutes * 60 if args.time_budget_minutes is not None else None
     config = read_json(args.config)
     client = client or OpenAlexClient(per_second=args.openalex_per_second)
+    start_heartbeat(client)
     web = web or Web(per_second=args.web_per_second)
     cache = Cache(CACHE_DIR, enabled=not args.no_cache)
     unis = config["universities"][: args.institutions] if args.institutions else config["universities"]
