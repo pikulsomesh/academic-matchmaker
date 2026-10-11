@@ -348,6 +348,13 @@ class WebDecodeTests(unittest.TestCase):
             self.assertEqual(web.get_text("https://example.edu/p"), "caf\u00e9 page")
 
 
+class BadLinkTests(unittest.TestCase):
+    def test_malformed_href_is_skipped_not_fatal(self):
+        html = '<a href="http://[bad">broken</a><a href="/people/ada">Ada</a>'
+        text, mailtos, links, _ = contacts.page_text_and_links(html, "https://example.edu/dir")
+        self.assertEqual([url for url, _ in links], ["https://example.edu/people/ada"])
+
+
 class RateLimitTests(unittest.TestCase):
     def _client(self, retry_after):
         class Resp:

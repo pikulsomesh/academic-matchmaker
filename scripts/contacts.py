@@ -140,6 +140,14 @@ def extract_title(text):
 
 # --- pages ----------------------------------------------------------------------------
 
+def safe_urljoin(base, href):
+    """urljoin, or None for a malformed link (e.g. href="http://[bad") instead of an exception."""
+    try:
+        return urljoin(base, href)
+    except ValueError:
+        return None
+
+
 def page_text_and_links(html_text, base_url):
     soup = BeautifulSoup(html_text, "html.parser")
     for tag in soup(["script", "style", "noscript", "svg"]):
@@ -152,7 +160,9 @@ def page_text_and_links(html_text, base_url):
             addr = href[7:].split("?", 1)[0]
             mailtos.append(normalize_email_text(addr))
         elif href.startswith(("http", "/")):
-            links.append((urljoin(base_url, href), a.get_text(" ", strip=True)))
+            joined = safe_urljoin(base_url, href)
+            if joined:
+                links.append((joined, a.get_text(" ", strip=True)))
     text = soup.get_text("\n", strip=True)
     return text, mailtos, links, soup
 
@@ -210,7 +220,7 @@ def scrape_directory_page(html_text, url, item_selector=None):
             if href.lower().startswith(("mailto:", "tel:", "#", "javascript:")):
                 continue
             if name_key(a.get_text(" ", strip=True)) == name_key(name) or profile is None:
-                profile = urljoin(url, href)
+                profile = safe_urljoin(url, href) or profile
         if not name or len(name) > 80:
             continue
         entries.append({
