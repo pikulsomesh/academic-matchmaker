@@ -419,6 +419,27 @@ class RequestCapTests(unittest.TestCase):
             shutil.rmtree(tmp)
 
 
+class AssembleConfigTests(unittest.TestCase):
+    def test_tied_ranks_keep_their_own_institution_ids(self):
+        tmp = tempfile.mkdtemp()
+        try:
+            config = os.path.join(tmp, "c.json")
+            pathlib.Path(config).write_text(json.dumps({"universities": [
+                {"rank": 17, "name": "Tsinghua University", "country_code": "CN", "openalex_id": None},
+                {"rank": 17, "name": "University of California, Berkeley", "country_code": "US", "openalex_id": None}]}))
+            for i, (name, inst) in enumerate([("Tsinghua University", "I99065089"),
+                                              ("University of California, Berkeley", "I95457486")]):
+                pathlib.Path(tmp, f"partial-{i}.json").write_text(json.dumps(
+                    {"universities": [], "records": [], "config_updates": {name: inst}}))
+            with mock.patch.object(assemble.ingestion, "CONFIG_PATH", config), \
+                    mock.patch.object(assemble.ingestion, "finalize", return_value=[]):
+                assemble.main(["--partials", tmp, "--expect", "2", "--config", config, "--out-dir", tmp])
+            ids = {u["name"]: u["openalex_id"] for u in json.loads(pathlib.Path(config).read_text())["universities"]}
+            self.assertEqual(ids, {"Tsinghua University": "I99065089", "University of California, Berkeley": "I95457486"})
+        finally:
+            shutil.rmtree(tmp)
+
+
 class PauseTests(unittest.TestCase):
     def test_time_budget_pauses_with_exit_75(self):
         tmp = tempfile.mkdtemp()

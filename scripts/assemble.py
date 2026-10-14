@@ -46,8 +46,9 @@ def main(argv=None):
     records = ingestion.finalize(records, universities, args, config.get("source"), requests_made)
     if updates and args.config == ingestion.CONFIG_PATH:
         for uni in config.get("universities", []):
-            if not uni.get("openalex_id") and str(uni["rank"]) in updates:
-                uni["openalex_id"] = updates[str(uni["rank"])]
+            # Keyed by name: tied QS ranks share a number, so a rank key gave both universities one id.
+            if not uni.get("openalex_id") and uni["name"] in updates:
+                uni["openalex_id"] = updates[uni["name"]]
         write_json(args.config, config)
 
 
