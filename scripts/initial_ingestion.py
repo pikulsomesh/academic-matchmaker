@@ -460,7 +460,7 @@ def build(args, client=None, web=None):
         inst = resolve_institution(client, cache, uni)
         if not uni.get("openalex_id"):
             uni["openalex_id"] = short_id(inst["id"])
-            config_updates[str(uni["rank"])] = uni["openalex_id"]
+            config_updates[uni["name"]] = uni["openalex_id"]
             config_changed = True
         domains = institution_domains(uni, inst)
         log(f"[{uni['rank']:>3}] {uni['name']} -> {inst['display_name']} ({short_id(inst['id'])}, {', '.join(sorted(domains)) or 'no domain'})")
