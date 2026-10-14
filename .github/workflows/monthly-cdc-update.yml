@@ -248,7 +248,8 @@ jobs:
           else
             git commit -m "data: ${{ needs.plan.outputs.mode }} update $(date -u +%Y-%m-%d)"
             # main may have moved during a long build; data files are only written here.
-            git pull --rebase origin "${{ github.ref_name }}"
+            # --autostash: with Hugging Face hosting the generated public/data files stay uncommitted.
+            git pull --rebase --autostash origin "${{ github.ref_name }}"
             git push
             echo "changed=true" >> "$GITHUB_OUTPUT"
           fi
