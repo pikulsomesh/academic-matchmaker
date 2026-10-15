@@ -41,8 +41,9 @@ jobs:
       window_years: ${{ steps.plan.outputs.window_years }}
       size_budget_mb: ${{ steps.plan.outputs.size_budget_mb }}
       search_index_rows: ${{ steps.plan.outputs.search_index_rows }}
-      shards: ${{ steps.plan.outputs.shards }}
-      shard_list: ${{ steps.plan.outputs.shard_list }}
+      units: ${{ steps.plan.outputs.units }}
+      jobs: ${{ steps.plan.outputs.jobs }}
+      request_cap: ${{ steps.plan.outputs.request_cap }}
       hf_empty: ${{ steps.hf_pull.outputs.empty }}
     env:
       # Optional Hugging Face hosting: with both set, the data lives in that dataset repo instead of
@@ -71,19 +72,21 @@ jobs:
           python scripts/plan_run.py --event "${{ github.event_name }}" --schedule "${{ github.event.schedule }}"
           --mode "${{ inputs.mode }}" --per-institution "${{ inputs.per_institution }}"
 
-  # A full build runs as many small jobs in parallel, each on its own few universities. One job that
-  # hangs or hits its time budget only delays its own universities; its progress is cached and the
-  # next run finishes it. Nothing is published until every shard has finished.
+  # A full build runs one job per university, 20 at a time. Each university keeps its own cache
+  # (ingestion-uni-<name>--...), so adding universities never moves anyone's progress. A job that hangs or
+  # hits its time budget only delays its own university; the next run finishes it. Nothing is published
+  # until every university has finished.
   ingest:
     needs: plan
     if: needs.plan.outputs.mode == 'full'
+    name: ingest ${{ matrix.unit.name }}
     runs-on: ubuntu-latest
     timeout-minutes: 340
     strategy:
       fail-fast: false
       max-parallel: 20
       matrix:
-        shard: ${{ fromJSON(needs.plan.outputs.shard_list) }}
+        unit: ${{ fromJSON(needs.plan.outputs.units) }}
     env:
       OPENALEX_MAILTO: ${{ vars.OPENALEX_MAILTO }}
       OPENALEX_API_KEY: ${{ secrets.OPENALEX_API_KEY }}
@@ -96,50 +99,54 @@ jobs:
           cache: pip
           cache-dependency-path: scripts/requirements.txt
 
-      - run: pip install -r scripts/requirements.txt
+      # Ingestion needs only these two; the full requirements (onnxruntime, numpy) are for the publish job.
+      - run: pip install "requests>=2.31" "beautifulsoup4>=4.12"
 
-      # The last pattern also finds the single-job cache of earlier runs (named ingestion-<run id>-<attempt>,
-      # run ids start with 3), which holds the progress of every university.
+      # The second pattern is the old layout (one cache per position % 50 shard), used once per university
+      # until it has a cache of its own; --prune-cache then drops the other university's entries.
       - name: Restore ingestion cache
         uses: actions/cache/restore@v4
         with:
           path: .cache/ingestion
-          key: ingestion-shard-${{ matrix.shard }}-${{ github.run_id }}-${{ github.run_attempt }}
+          key: ingestion-uni-${{ matrix.unit.key }}--${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: |
-            ingestion-shard-${{ matrix.shard }}-
-            ingestion-3
+            ingestion-uni-${{ matrix.unit.key }}--
+            ingestion-shard-${{ matrix.unit.legacy_shard }}-
 
-      - name: Ingest this shard
+      - name: Ingest this university
         timeout-minutes: 300
+        env:
+          UNIVERSITY: ${{ matrix.unit.name }}
         run: |
           set +e
-          python scripts/initial_ingestion.py --shard "${{ matrix.shard }}/${{ needs.plan.outputs.shards }}" \
-            --partial-out "partials/partial-${{ matrix.shard }}.json" \
+          python scripts/initial_ingestion.py --only "$UNIVERSITY" --prune-cache --dirty-marker .cache/ingestion.dirty \
+            --partial-out "partials/partial-${{ matrix.unit.key }}.json" \
             --per-institution "${{ needs.plan.outputs.per_institution }}" \
             --min-works "${{ needs.plan.outputs.min_works }}" --min-citations "${{ needs.plan.outputs.min_citations }}" \
             --min-h-index "${{ needs.plan.outputs.min_h_index }}" --window-years "${{ needs.plan.outputs.window_years }}" \
             --openalex-per-second 0.5 --web-per-second 3 --workers 8 \
-            --max-openalex-requests 1500 \
+            --max-openalex-requests "${{ needs.plan.outputs.request_cap }}" \
             --time-budget-minutes 270
           code=$?
           if [ "$code" = 75 ]; then
-            echo "::notice::Shard ${{ matrix.shard }} paused with progress cached; the next run resumes it."
+            echo "::notice::$UNIVERSITY paused with progress cached; the next run resumes it."
             exit 0
           fi
           exit $code
 
+      # Saved only when something was added or pruned; a fully cached university adds no new cache entry.
       - name: Save ingestion cache
-        if: always()
+        if: always() && hashFiles('.cache/ingestion.dirty') != ''
         uses: actions/cache/save@v4
         with:
           path: .cache/ingestion
-          key: ingestion-shard-${{ matrix.shard }}-${{ github.run_id }}-${{ github.run_attempt }}
+          key: ingestion-uni-${{ matrix.unit.key }}--${{ github.run_id }}-${{ github.run_attempt }}
 
-      - name: Keep this shard's result
+      - name: Keep this university's result
         uses: actions/upload-artifact@v4
         with:
-          name: partial-${{ matrix.shard }}
-          path: partials/partial-${{ matrix.shard }}.json
+          name: partial-${{ matrix.unit.key }}
+          path: partials/partial-${{ matrix.unit.key }}.json
           if-no-files-found: ignore
           retention-days: 3
 
@@ -186,27 +193,27 @@ jobs:
           path: .cache/models
           key: minilm-l6-v2-onnx-fp32
 
-      - name: Collect the shards
+      - name: Collect the results
         if: needs.plan.outputs.mode == 'full'
-        continue-on-error: true  # no shard finished at all: the assemble step then pauses the run
+        continue-on-error: true  # no university finished at all: the assemble step then pauses the run
         uses: actions/download-artifact@v4
         with:
           pattern: partial-*
           path: partials
 
-      # Exit 75 = a shard has not finished (time budget): publish nothing, the next run resumes it.
+      # Exit 75 = a university has not finished (time budget): publish nothing, the next run resumes it.
       - name: Assemble the full index
         id: assemble
         if: needs.plan.outputs.mode == 'full'
         run: |
           set +e
-          python scripts/assemble.py --partials partials --expect "${{ needs.plan.outputs.shards }}" \
+          python scripts/assemble.py --partials partials --expect "${{ needs.plan.outputs.jobs }}" \
             --per-institution "${{ needs.plan.outputs.per_institution }}" --window-years "${{ needs.plan.outputs.window_years }}" \
             --size-budget-mb "${{ needs.plan.outputs.size_budget_mb }}" --search-index-rows "${{ needs.plan.outputs.search_index_rows }}"
           code=$?
           if [ "$code" = 75 ]; then
             echo "paused=true" >> "$GITHUB_OUTPUT"
-            echo "::notice::Some shards are not finished; nothing was published. The next run resumes them."
+            echo "::notice::Some universities are not finished; nothing was published. The next run resumes them."
             exit 0
           fi
           exit $code
