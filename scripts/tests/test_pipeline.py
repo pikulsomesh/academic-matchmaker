@@ -137,6 +137,14 @@ class PlanTests(unittest.TestCase):
         self.assertEqual(self.plan(event="push", schedule="", metadata={}), ("full", 200))
         self.assertEqual(self.plan(metadata={"last_ingestion": "x", "per_institution": 1000})[0], "skip", "done")
 
+    def test_rebuild_token_resumes_until_published(self):
+        coverage = dict(self.COVERAGE, rebuild_token=1)
+        built = {"last_ingestion": "x", "per_institution": 1000}
+        run = lambda meta: plan_run.plan("schedule", "0 2 * * *", "", "", meta, coverage, True)[:2]
+        self.assertEqual(run(built), ("full", 1000), "token not in the published data yet")
+        self.assertEqual(run(dict(built, rebuild_token=0)), ("full", 1000))
+        self.assertEqual(run(dict(built, rebuild_token=1))[0], "skip", "published with this token")
+
     def test_monthly_and_manual(self):
         self.assertEqual(self.plan(schedule="0 0 1 * *")[0], "cdc")
         self.assertEqual(self.plan(event="workflow_dispatch", mode="full", per=""), ("full", 200))

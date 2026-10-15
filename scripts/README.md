@@ -99,7 +99,9 @@ verified ones. `--require-contact` drops records with neither an email nor an in
 10,000, 25,000, 50,000 people per university) up to `target_per_institution` (held at 1,000 for now: raise
 it to let the daily run grow again) with looser thresholds each step (works, citations,
 h-index), keeping anyone with a paper in the last `window_years` (10). Each record has
-`last_publication_year`. Growth stops by itself when the data would pass `size_budget_mb` (800, under
+`last_publication_year`. `rebuild_token` asks for a rebuild at the target size: until a build
+published with that token exists, every daily run resumes it from the per-university caches (a build
+paused by the OpenAlex daily limit finishes on its own). Bump it to force a new rebuild. Growth stops by itself when the data would pass `size_budget_mb` (800, under
 GitHub Pages' 1 GB): the least important people (lowest `seniority_score`, then citations) are dropped
 first and `metadata.budget_reached` turns on. When there are more than `search_index_rows` people
 (100,000), `faculty_search.json` keeps only the most important of them and every university also gets

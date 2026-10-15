@@ -100,6 +100,11 @@ def plan(event, schedule, mode_input, per_institution_input, metadata, coverage,
         initial = int(coverage.get("initial_per_institution", 200))
         return "full", initial, f"first full build at {initial} per institution"
     built = int(metadata.get("per_institution") or 200)
+    token = coverage.get("rebuild_token")
+    if token is not None and metadata.get("rebuild_token") != token:
+        # A rebuild was asked for (bump rebuild_token) and no build with that token has been published yet:
+        # run every day until one is, so a build paused by the OpenAlex daily limit resumes on its own.
+        return "full", target, f"rebuild {token} not published yet; resuming at {target} per institution"
     reached_at = metadata.get("size_budget_mb") or coverage.get("size_budget_mb", 800)
     if metadata.get("budget_reached") and budget_mb(coverage, hosted) <= reached_at:
         return "skip", built, "size budget reached; coverage stops growing"

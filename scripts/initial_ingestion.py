@@ -648,7 +648,9 @@ def finalize(records, universities, args, ranking_source, openalex_requests):
                           budget_bytes=int(args.size_budget_mb * 1e6) if args.size_budget_mb else None,
                           search_index_rows=args.search_index_rows)
     with_email = sum(1 for r in records if r["email"])
+    coverage = read_json(os.path.join(os.path.dirname(os.path.abspath(args.config)), "coverage.json"), {})
     write_json(os.path.join(args.out_dir, "metadata.json"), {
+        "rebuild_token": coverage.get("rebuild_token"),
         "generated_at": now_iso(),
         "last_ingestion": today_iso(),
         "last_cdc_run": today_iso(),
