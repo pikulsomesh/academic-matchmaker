@@ -1,7 +1,7 @@
 name: Temporary probe (removed before merge)
 on:
   push:
-    branches: [claude/project-thread-cv0jva]
+    branches: [claude/scratch-probe]
     paths: [.github/workflows/zz-probe.yml, scripts/zz_probe.py]
 jobs:
   probe:
