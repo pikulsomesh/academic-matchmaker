@@ -544,7 +544,7 @@ class OrcidEmploymentTests(unittest.TestCase):
         self.assertEqual([contacts.role_from_title(t) for t in (
             "Associate Professor of Chemistry", "Postdoctoral fellow", "PhD student", "Research Scientist",
             "Professor Emeritus", None, "Clinician")],
-            ["professor", "postdoc", "student", "researcher", "emeritus", None, None])
+            ["faculty", "postdoc", "student", "researcher", "emeritus", None, None])
 
 
 class EmbeddingTextTests(unittest.TestCase):
@@ -703,7 +703,7 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual((wei["title"], wei["title_source"], wei["role"], wei["orcid_affiliation"]),
                          ("Staff Scientist, Chemistry", "orcid_employment", "researcher", "match"),
                          "no profile page: the current ORCID job at this university becomes the title")
-        self.assertEqual((jane["title_source"], jane["role"], jane["orcid_affiliation"]), ("profile_page", "professor", None))
+        self.assertEqual((jane["title_source"], jane["role"], jane["orcid_affiliation"]), ("profile_page", "faculty", None))
         self.assertEqual(wei["profile_url"], "https://orcid.org/0000-0003")
         self.assertEqual(records[-1]["name"], "Wei Zhang", "unverified records sort last")
 
