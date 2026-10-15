@@ -70,8 +70,13 @@ class FakeOpenAlex(OpenAlexClient):
                 {"id": "https://openalex.org/I63966007", "display_name": "Massachusetts Institute of Technology",
                  "type": "education", "homepage_url": "http://web.mit.edu/", "country_code": "US"},
             ]}
+        if path.startswith("institutions/"):
+            return {"id": f"https://openalex.org/{path.split('/')[1]}", "display_name": "Massachusetts Institute of Technology",
+                    "type": "education", "homepage_url": "http://web.mit.edu/", "country_code": "US"}
         if path == "authors" and flt.startswith("last_known_institutions.id"):
-            return self._page(self.authors, params)
+            inst = flt.split(",")[0].split(":", 1)[1]
+            by_inst = getattr(self, "by_institution", None)
+            return self._page(by_inst.get(inst, []) if by_inst else self.authors, params)
         if path == "authors" and flt.startswith("openalex:"):
             ids = flt.split(":", 1)[1].split("|")
             return {"results": [self.refreshed.get(i) or a for a in self.authors
@@ -162,6 +167,14 @@ class TierTests(unittest.TestCase):
         self.assertEqual(self.plan(3000), ("full", 10000))
         self.assertEqual(self.plan(10000)[0], "skip")
         self.assertEqual(plan_run.plan("schedule", "0 2 * * *", "", "", {}, self.COVERAGE, True)[:2], ("full", 1000))
+
+    def test_target_holds_growth(self):
+        held = dict(self.COVERAGE, target_per_institution=1000)
+        meta = {"last_ingestion": "x", "per_institution": 1000}
+        self.assertEqual(plan_run.plan("schedule", "0 2 * * *", "", "", meta, held, True)[0], "skip")
+        self.assertEqual(plan_run.plan("schedule", "0 2 * * *", "", "", {}, held, True)[:2], ("full", 1000))
+        self.assertEqual(plan_run.plan("schedule", "0 2 * * *", "", "", meta,
+                                       dict(self.COVERAGE, target_per_institution=3000), True)[:2], ("full", 3000))
 
     def test_stops_when_size_budget_reached(self):
         self.assertEqual(self.plan(3000, budget_reached=True)[0], "skip")
@@ -531,7 +544,7 @@ class OrcidEmploymentTests(unittest.TestCase):
         self.assertEqual([contacts.role_from_title(t) for t in (
             "Associate Professor of Chemistry", "Postdoctoral fellow", "PhD student", "Research Scientist",
             "Professor Emeritus", None, "Clinician")],
-            ["professor", "postdoc", "student", "researcher", "emeritus", None, None])
+            ["faculty", "postdoc", "student", "researcher", "emeritus", None, None])
 
 
 class EmbeddingTextTests(unittest.TestCase):
@@ -663,6 +676,18 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(sorted((r["id"], r["email"], r["title"]) for r in merged), single)
         self.assertEqual(json.loads(pathlib.Path(out, "metadata.json").read_text())["faculty_count"], 3)
 
+    def test_merged_university_pools_its_predecessor_ids(self):
+        config = json.loads(pathlib.Path(self.config).read_text())
+        config["universities"][0].update(openalex_id="I63966007", extra_openalex_ids=["I777"])
+        pathlib.Path(self.config).write_text(json.dumps(config))
+        client = FakeOpenAlex(self.authors, self.works)
+        client.by_institution = {"I63966007": self.authors[:1], "I777": self.authors[1:]}
+        records = initial_ingestion.main(["--config", self.config, "--out-dir", self.tmp, "--per-institution", "2"],
+                                         client=client, web=self.web)
+        self.assertEqual(sorted(r["name"] for r in records), ["Jane Doe", "Rahul Kumar"], "most cited two across both ids")
+        self.assertTrue(all(r["institution"]["id"] == "I63966007" for r in records))
+        self.assertEqual(json.loads(pathlib.Path(self.tmp, "universities.json").read_text())[0]["extra_openalex_ids"], ["I777"])
+
     def test_ingestion_schema_and_contacts(self):
         records, client = self.ingest()
         by_name = {r["name"]: r for r in records}
@@ -678,7 +703,7 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual((wei["title"], wei["title_source"], wei["role"], wei["orcid_affiliation"]),
                          ("Staff Scientist, Chemistry", "orcid_employment", "researcher", "match"),
                          "no profile page: the current ORCID job at this university becomes the title")
-        self.assertEqual((jane["title_source"], jane["role"], jane["orcid_affiliation"]), ("profile_page", "professor", None))
+        self.assertEqual((jane["title_source"], jane["role"], jane["orcid_affiliation"]), ("profile_page", "faculty", None))
         self.assertEqual(wei["profile_url"], "https://orcid.org/0000-0003")
         self.assertEqual(records[-1]["name"], "Wei Zhang", "unverified records sort last")
 

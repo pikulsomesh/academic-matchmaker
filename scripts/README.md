@@ -35,6 +35,9 @@ If the budget runs out mid-run, re-run the next day and it resumes from the cach
 1. **Institutions**: `config/top100_qs2026.json` (QS World University Rankings 2026). Each is
    resolved to an OpenAlex institution; the id is written back to the config so you can check
    or pin it. `email_domains` (optional) adds accepted email domains beyond the homepage's.
+   `extra_openalex_ids` (optional) pools the researchers OpenAlex still files under a merged university's
+   predecessors (Institute of Science Tokyo: Tokyo Tech and Tokyo Medical and Dental University) into the
+   same per-university cap, most cited first. The quality gate fails if two universities share an id.
 2. **Faculty**: OpenAlex authors whose last known institution is that university, with at least
    20 works, 500 citations, h-index 10 and a paper in the last 3 years, most cited first. Everyone
    passing those thresholds is kept, up to `--per-institution` (script default 1000; the workflow
@@ -46,6 +49,10 @@ If the budget runs out mid-run, re-run the next day and it resumes from the cach
      (`"directories": ["https://…/people"]` or `[{"url": "…", "item_selector": ".person-card"}]`);
    - institutional URLs from the author's public ORCID record, scraped for email and title;
    - a public ORCID email on the institution's domain.
+
+   - titles: when no page or directory gives one, the person's current role at this university from their
+     ORCID employment history (`title_source: orcid_employment`; `role` is faculty, researcher, postdoc,
+     student or emeritus; `orcid_affiliation` says whether their current ORCID jobs are here, elsewhere or absent).
 
    Obfuscated emails (`[at]`, `(at)`, `{at}`, ` at `, and `[dot]`/` dot `) are normalized, and an
    email is only accepted when it matches the person's name and the institution's domain.
@@ -81,7 +88,8 @@ verified ones. `--require-contact` drops records with neither an email nor an in
 ## Growing the database
 
 `config/coverage.json` holds the plan. Each daily run builds the next tier in `tiers` (1,000, 3,000,
-10,000, 25,000, 50,000 people per university) with looser thresholds each step (works, citations,
+10,000, 25,000, 50,000 people per university) up to `target_per_institution` (held at 1,000 for now: raise
+it to let the daily run grow again) with looser thresholds each step (works, citations,
 h-index), keeping anyone with a paper in the last `window_years` (10). Each record has
 `last_publication_year`. Growth stops by itself when the data would pass `size_budget_mb` (800, under
 GitHub Pages' 1 GB): the least important people (lowest `seniority_score`, then citations) are dropped

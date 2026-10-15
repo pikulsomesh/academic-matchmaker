@@ -490,6 +490,15 @@ def build(args, client=None, web=None):
                     directory_index.setdefault(contacts.name_key(entry["name"]), entry)
 
         authors = fetch_authors(client, cache, short_id(inst["id"]), args)
+        extra_ids = [i for i in uni.get("extra_openalex_ids") or [] if i != short_id(inst["id"])]
+        if extra_ids:
+            # A merged university (e.g. Institute of Science Tokyo) whose researchers OpenAlex still files under
+            # the predecessors: pool everyone, most cited first, within the same cap.
+            pooled = {short_id(a["id"]): a for a in authors}
+            for extra in extra_ids:
+                for a in fetch_authors(client, cache, extra, args):
+                    pooled.setdefault(short_id(a["id"]), a)
+            authors = sorted(pooled.values(), key=lambda a: -a.get("cited_by_count", 0))[: args.per_institution]
 
         recent_by_author = fetch_recent_works_batched(client, cache, [short_id(a["id"]) for a in authors])
 
@@ -515,6 +524,7 @@ def build(args, client=None, web=None):
             "rank": uni["rank"],
             "homepage_url": inst.get("homepage_url"),
             "faculty_count": len(inst_records),
+            **({"extra_openalex_ids": extra_ids} if extra_ids else {}),
         })
 
     if args.partial_out:

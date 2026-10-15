@@ -316,14 +316,15 @@ _ROLE_RULES = (
     ("student", ("phd student", "doctoral student", "doctoral candidate", "phd candidate", "graduate student")),
     ("postdoc", ("postdoc", "post-doc", "postdoctoral")),
     ("emeritus", ("emeritus", "emerita", "retired")),
-    ("professor", ("professor", "lecturer", "reader", "chair ", "principal investigator", "group leader",
+    ("faculty", ("professor", "lecturer", "reader", "chair ", "principal investigator", "group leader",
                    "head of", "director")),
     ("researcher", ("fellow", "scientist", "researcher", "research associate", "investigator", "staff")),
 )
 
 
 def role_from_title(title):
-    """Coarse role from a title: professor, researcher, postdoc, student, emeritus, or None when unknown."""
+    """Coarse role from a title: faculty (professor, lecturer, group leader...), researcher, postdoc, student, emeritus,
+    or None when unknown."""
     text = f" {(title or '').lower()} "
     if not text.strip():
         return None
