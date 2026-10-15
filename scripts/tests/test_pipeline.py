@@ -504,6 +504,49 @@ class EmailTests(unittest.TestCase):
                          "Associate Professor of Materials Science and Engineering")
 
 
+class OrcidEmploymentTests(unittest.TestCase):
+    def emp(self, org, role=None, dept=None, start=None, current=True, ror=None):
+        return {"org": org, "ror": ror, "role": role, "department": dept, "start": start, "current": current}
+
+    def test_title_from_current_job_here(self):
+        jobs = [self.emp("Murdoch Childrens Research Institute", "Executive Director", start=2015),
+                self.emp("University of Melbourne", "Professor", start=2006),
+                self.emp("University of Melbourne", "Research Fellow", start=1999, current=False)]
+        self.assertEqual(contacts.employment_title(jobs, ["The University of Melbourne"]), ("Professor", "match"))
+
+    def test_department_added_and_prof_expanded(self):
+        jobs = [self.emp("Brown University Warren Alpert Medical School", "Professor", "Psychiatry and Human Behavior")]
+        self.assertEqual(contacts.employment_title(jobs, ["Brown University"]),
+                         ("Professor, Psychiatry and Human Behavior", "match"))
+        self.assertEqual(contacts.employment_title([self.emp("Cornell University", "Prof")], ["Cornell University"])[0], "Professor")
+
+    def test_other_university_is_not_used_but_is_reported(self):
+        jobs = [self.emp("Jilin University", "Prof. Dr.")]
+        self.assertEqual(contacts.employment_title(jobs, ["University of Illinois Urbana-Champaign"]), (None, "elsewhere"))
+        self.assertEqual(contacts.employment_title([], ["X University"]), (None, None))
+
+    def test_similar_names_do_not_match(self):
+        self.assertFalse(contacts.org_matches("Charité-Universitätsmedizin Berlin", None, ["Freie Universität Berlin"]))
+        self.assertFalse(contacts.org_matches("Massachusetts General Hospital", None, ["Massachusetts Institute of Technology"]))
+        self.assertTrue(contacts.org_matches("anything", "https://ror.org/05dqf9946", [], ["https://ror.org/05dqf9946"]))
+        self.assertFalse(contacts.org_matches("Institute of Science Tokyo", "https://ror.org/0112mx960", ["Institute of Science Tokyo"],
+                                              ["https://ror.org/05dqf9946"]))
+
+    def test_parse_record_and_roles(self):
+        record = {"activities-summary": {"employments": {"affiliation-group": [{"summaries": [{"employment-summary": {
+            "role-title": " Professor ", "department-name": "Physics", "start-date": {"year": {"value": "2014"}},
+            "organization": {"name": "University of Amsterdam", "disambiguated-organization": {
+                "disambiguation-source": "ROR", "disambiguated-organization-identifier": "https://ror.org/04dkp9463"}}}}]}]}}}
+        self.assertEqual(contacts.parse_orcid_employments(record), [
+            {"org": "University of Amsterdam", "ror": "https://ror.org/04dkp9463", "role": "Professor",
+             "department": "Physics", "start": 2014, "current": True}])
+        self.assertEqual(contacts.parse_orcid_employments({}), [])
+        self.assertEqual([contacts.role_from_title(t) for t in (
+            "Associate Professor of Chemistry", "Postdoctoral fellow", "PhD student", "Research Scientist",
+            "Professor Emeritus", None, "Clinician")],
+            ["professor", "postdoc", "student", "researcher", "emeritus", None, None])
+
+
 class EmbeddingTextTests(unittest.TestCase):
     def test_matches_browser_recipe(self):
         record = {"title": "Associate Professor of Chemistry", "primary_domain": "Materials Science",
@@ -587,12 +630,20 @@ class PipelineTests(unittest.TestCase):
               <div class='person'><h3>Rahul Kumar</h3><p>Professor of Materials Science and Engineering</p>
                 <a href='/people/rahul-kumar'>Profile</a> <span>rkumar (at) mit.edu</span></div>
               <div class='person'><h3>Someone Else</h3><a href='mailto:other@mit.edu'>other@mit.edu</a></div></div>""",
-            "https://pub.orcid.org/v3.0/0000-0001/person": json.dumps({
+            "https://pub.orcid.org/v3.0/0000-0001/record": json.dumps({"person": {
                 "emails": {"email": []},
-                "researcher-urls": {"researcher-url": [{"url": {"value": "https://www.mit.edu/~jdoe/"}}]}}),
+                "researcher-urls": {"researcher-url": [{"url": {"value": "https://www.mit.edu/~jdoe/"}}]}}}),
             "https://www.mit.edu/~jdoe/": "<html><body><h1>Jane Doe</h1><p>Associate Professor of Chemistry</p>"
                                           "<p>Email: jane.doe [at] mit [dot] edu</p></body></html>",
-            "https://pub.orcid.org/v3.0/0000-0003/person": json.dumps({"emails": {"email": []}}),
+            "https://pub.orcid.org/v3.0/0000-0003/record": json.dumps({
+                "person": {"emails": {"email": []}},
+                "activities-summary": {"employments": {"affiliation-group": [
+                    {"summaries": [{"employment-summary": {
+                        "role-title": "Staff Scientist", "department-name": "Chemistry",
+                        "organization": {"name": "Massachusetts Institute of Technology"},
+                        "start-date": {"year": {"value": "2020"}}}}]},
+                    {"summaries": [{"employment-summary": {
+                        "role-title": "Postdoc", "organization": {"name": "MIT"}, "end-date": {"year": {"value": "2019"}}}}]}]}}}),
         })
 
     def tearDown(self):
@@ -649,6 +700,10 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(rahul["profile_url"], "https://dmse.mit.edu/people/rahul-kumar")
         self.assertEqual(rahul["title"], "Professor of Materials Science and Engineering")
         self.assertIn("missing_email", wei["flags"])
+        self.assertEqual((wei["title"], wei["title_source"], wei["role"], wei["orcid_affiliation"]),
+                         ("Staff Scientist, Chemistry", "orcid_employment", "researcher", "match"),
+                         "no profile page: the current ORCID job at this university becomes the title")
+        self.assertEqual((jane["title_source"], jane["role"], jane["orcid_affiliation"]), ("profile_page", "professor", None))
         self.assertEqual(wei["profile_url"], "https://orcid.org/0000-0003")
         self.assertEqual(records[-1]["name"], "Wei Zhang", "unverified records sort last")
 

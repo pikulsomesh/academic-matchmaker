@@ -237,17 +237,19 @@ class Web:
 
 
 def fetch_orcid(web, cache, orcid_url):
+    """Emails, researcher URLs and employment history from the public ORCID record (one request)."""
     orcid = orcid_url.rstrip("/").rsplit("/", 1)[-1]
-    cached = cache.get("orcid", orcid)
+    cached = cache.get("orcid-record", orcid)
     if cached is not None:
         return cached
-    body = web.get_text(f"https://pub.orcid.org/v3.0/{orcid}/person", headers={"Accept": "application/json"})
-    result = {"emails": [], "urls": []}
+    body = web.get_text(f"https://pub.orcid.org/v3.0/{orcid}/record", headers={"Accept": "application/json"})
+    result = {"emails": [], "urls": [], "employments": []}
     if body:
         try:
-            person = json.loads(body)
+            record = json.loads(body)
         except ValueError:
-            person = {}
+            record = {}
+        person = record.get("person") or {}
         for item in ((person.get("emails") or {}).get("email") or []):
             if item.get("email"):
                 result["emails"].append(item["email"].lower())
@@ -255,7 +257,8 @@ def fetch_orcid(web, cache, orcid_url):
             value = ((item.get("url") or {}).get("value") or "").strip()
             if value.startswith("http"):
                 result["urls"].append(value)
-    return cache.put("orcid", orcid, result)
+        result["employments"] = contacts.parse_orcid_employments(record)
+    return cache.put("orcid-record", orcid, result)
 
 
 def scrape_profile(web, cache, url, name, domains):
@@ -280,18 +283,22 @@ def load_directory(web, cache, directory):
     return cache.put("directory", f"{url}|{selector}", entries)
 
 
-def find_contacts(author, uni, domains, directory_index, web, cache, args):
+def find_contacts(author, uni, domains, directory_index, web, cache, args, inst=None):
     name = author["display_name"]
-    found = {"email": None, "profile_url": None, "profile_source": None, "title": None}
+    found = {"email": None, "profile_url": None, "profile_source": None, "title": None, "title_source": None,
+             "orcid_affiliation": None}
 
     entry = directory_index.get(contacts.name_key(name))
     if entry:
         found["email"] = entry.get("email")
         found["title"] = entry.get("title")
+        if found["title"]:
+            found["title_source"] = "directory"
         if entry.get("profile_url"):
             found["profile_url"], found["profile_source"] = entry["profile_url"], "directory"
 
-    orcid = fetch_orcid(web, cache, author["orcid"]) if author.get("orcid") and not args.skip_orcid else {"emails": [], "urls": []}
+    orcid = (fetch_orcid(web, cache, author["orcid"]) if author.get("orcid") and not args.skip_orcid
+             else {"emails": [], "urls": [], "employments": []})
     if not found["profile_url"]:
         institutional = [u for u in orcid["urls"] if contacts.same_site(u, domains)]
         if institutional:
@@ -300,7 +307,15 @@ def find_contacts(author, uni, domains, directory_index, web, cache, args):
     if found["profile_url"] and not args.skip_scrape and (not found["email"] or not found["title"]):
         scraped = scrape_profile(web, cache, found["profile_url"], name, domains)
         found["email"] = found["email"] or scraped.get("email")
-        found["title"] = found["title"] or scraped.get("title")
+        if not found["title"] and scraped.get("title"):
+            found["title"], found["title_source"] = scraped["title"], "profile_page"
+
+    # The person's own ORCID employment history is the best title source for anyone without a profile page.
+    names = [uni["name"], *(inst or {}).get("alternate_names", []), (inst or {}).get("display_name")]
+    title, found["orcid_affiliation"] = contacts.employment_title(
+        orcid.get("employments") or [], [n for n in names if n], [(inst or {}).get("ror")])
+    if not found["title"] and title:
+        found["title"], found["title_source"] = title, "orcid_employment"
 
     if not found["email"]:
         for email in orcid["emails"]:
@@ -340,6 +355,9 @@ def build_record(author, uni, inst, recent, found):
         "orcid": author.get("orcid"),
         "recent_publications": merge_publications([], recent),
         "profile_source": found["profile_source"],
+        "role": contacts.role_from_title(found["title"]),
+        "title_source": found.get("title_source"),
+        "orcid_affiliation": found.get("orcid_affiliation"),
         "last_publication_year": last_publication_year(author),
     }
     apply_lab_signals(record, record["recent_publications"])
@@ -488,7 +506,7 @@ def build(args, client=None, web=None):
             if deadline is not None and time.monotonic() >= deadline:
                 raise Paused("time budget reached")
             recent = recent_by_author[short_id(author["id"])]
-            found = find_contacts(author, uni, domains, directory_index, web, cache, args)
+            found = find_contacts(author, uni, domains, directory_index, web, cache, args, inst)
             return build_record(author, uni, inst, recent, found)
 
         with ThreadPoolExecutor(max_workers=args.workers) as pool:
