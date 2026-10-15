@@ -1,7 +1,7 @@
 name: Temporary per-university ingest test (removed before merge)
 on:
   push:
-    branches: [claude/project-thread-cv0jva]
+    branches: [claude/per-university-cache]
     paths: [.github/workflows/zz-unit-test.yml]
 jobs:
   ingest:
