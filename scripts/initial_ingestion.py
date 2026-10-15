@@ -45,9 +45,23 @@ MAX_PAGE_BYTES = 3_000_000
 
 
 class Cache:
-    def __init__(self, root, enabled=True):
+    """One JSON file per cached answer. Remembers which files this run used, so a finished run can drop the rest
+    (prune) and the workflow can skip saving a cache nothing was added to (dirty)."""
+
+    def __init__(self, root, enabled=True, dirty_marker=None):
         self.root = root
         self.enabled = enabled
+        self.dirty_marker = dirty_marker
+        self.used = set()
+        self.dirty = False
+        self._lock = threading.Lock()
+
+    def _mark_dirty(self):
+        # Written on the first change, not at exit, so even a hard stop (watchdog) leaves the marker.
+        if not self.dirty and self.dirty_marker:
+            with open(self.dirty_marker, "w", encoding="utf-8") as fh:
+                fh.write("cache changed\n")
+        self.dirty = True
 
     def _path(self, kind, key):
         safe = hashlib.sha1(key.encode()).hexdigest()[:20]
@@ -56,6 +70,8 @@ class Cache:
     def get(self, kind, key):
         path = self._path(kind, key)
         if self.enabled and os.path.exists(path):
+            with self._lock:
+                self.used.add(path)
             with open(path, encoding="utf-8") as fh:
                 return json.load(fh)
         return None
@@ -67,7 +83,23 @@ class Cache:
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "w", encoding="utf-8") as fh:
             json.dump(value, fh)
+        with self._lock:
+            self.used.add(path)
+            self._mark_dirty()
         return value
+
+    def prune(self):
+        """Delete every cached file this run did not read or write. -> number removed."""
+        removed = 0
+        for folder, _, files in os.walk(self.root):
+            for name in files:
+                path = os.path.join(folder, name)
+                if path not in self.used:
+                    os.remove(path)
+                    removed += 1
+        if removed:
+            self._mark_dirty()
+        return removed
 
 
 def log(*args):
@@ -434,6 +466,12 @@ def parse_args(argv=None):
     p.add_argument("--workers", type=int, default=6)
     p.add_argument("--shard", default=None, metavar="I/N",
                    help="build only universities whose position in the list is I modulo N (parallel jobs)")
+    p.add_argument("--only", action="append", default=None, metavar="NAME",
+                   help="build only the university with this config name (repeatable); one parallel job per university")
+    p.add_argument("--prune-cache", action="store_true",
+                   help="after a finished run, delete cached answers this run did not use (keeps a per-university cache lean)")
+    p.add_argument("--dirty-marker", default=None,
+                   help="write this file when the cache changed, so the workflow saves the cache only then")
     p.add_argument("--partial-out", default=None,
                    help="write this shard's records to this file instead of the final data; assemble.py merges them")
     p.add_argument("--openalex-per-second", type=float, default=8)
@@ -506,12 +544,24 @@ def build(args, client=None, web=None):
     client = client or OpenAlexClient(per_second=args.openalex_per_second, max_requests=args.max_openalex_requests)
     start_heartbeat(client)
     web = web or Web(per_second=args.web_per_second)
-    cache = Cache(CACHE_DIR, enabled=not args.no_cache)
+    cache = Cache(CACHE_DIR, enabled=not args.no_cache, dirty_marker=args.dirty_marker)
+    result = ingest(args, config, client, web, cache, deadline)
+    if args.prune_cache and cache.enabled:
+        log(f"Pruned {cache.prune()} cached answers this run did not use.")
+    return result
+
+
+def ingest(args, config, client, web, cache, deadline):
     unis = config["universities"][: args.institutions] if args.institutions else config["universities"]
     if args.shard:
         index, count = (int(x) for x in args.shard.split("/"))
         unis = [u for position, u in enumerate(unis) if position % count == index]
         log(f"Shard {index}/{count}: {len(unis)} universities")
+    if args.only:
+        unknown = set(args.only) - {u["name"] for u in unis}
+        if unknown:
+            raise SystemExit(f"Not in the config: {', '.join(sorted(unknown))}")
+        unis = [u for u in unis if u["name"] in args.only]
 
     universities, records = [], []
     config_updates = {}

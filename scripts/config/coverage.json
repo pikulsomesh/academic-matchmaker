@@ -38,5 +38,6 @@
     }
   ],
   "vector_format": "bits",
-  "ingest_shards": 50
+  "ingest_shards": 50,
+  "openalex_daily_requests": 9000
 }

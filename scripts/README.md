@@ -18,12 +18,17 @@ Python 3.10+. `pip install -r scripts/requirements.txt`
   (`src/` references `faculty_search.json`). Otherwise it skips in seconds.
 - **Manual**: Actions tab → Run workflow, for a CDC or full run whenever you like.
 
-A full build runs as parallel jobs (`ingest_shards` in `config/coverage.json`, 50, at most 20 at a time),
-each on its own few universities with its own cache; `assemble.py` merges their results and only then is
-anything published. A shard that hits its time budget (270 minutes, with a hard stop 10 minutes later in case a
+A full build runs one job per university (`plan_run.ingest_units`, at most 20 at a time and 250 in all), each with
+its own cache saved as `ingestion-uni-<name slug>--<run>`. The key depends only on the university's name, so adding
+universities, anywhere in the list, never moves anyone else's progress. A job saves its cache only when it added
+something, and `--prune-cache` drops entries the run didn't use. The first run after the switch restores each
+university from the old `ingestion-shard-<position % ingest_shards>-` cache. `assemble.py` merges the results and only
+then is anything published. A job that hits its time budget (270 minutes, with a hard stop 10 minutes later in case a
 request hangs) or OpenAlex's daily limit ends as "paused" with its progress cached; nothing is published and the
-next run, daily or manual, finishes it. A shard that fails for another reason stops the run without publishing. OpenAlex limits apply per key, so each of the
-20 parallel jobs asks for 0.5 requests a second (about 10 a second in total); a 429 pauses the shard.
+next run, daily or manual, finishes it. A job that fails for another reason stops the run without publishing.
+OpenAlex limits apply per key, so each of the 20 parallel jobs asks for 0.5 requests a second (about 10 a second in
+total); a 429 pauses the job. Each job may make `openalex_daily_requests` (9,000) divided by the number of
+universities requests, but at least 500.
 
 Set the repository secret `OPENALEX_API_KEY` (free at openalex.org/settings/api). OpenAlex bills
 per request: without a key the daily budget is about 1,000 list calls, with a free key about
