@@ -547,6 +547,50 @@ class OrcidEmploymentTests(unittest.TestCase):
             ["faculty", "postdoc", "student", "researcher", "emeritus", None, None])
 
 
+class PaperEmailTests(unittest.TestCase):
+    class Args:
+        skip_orcid = False
+        skip_scrape = True
+
+    def find(self, author, pages=None, recent=()):
+        web = FakeWeb(pages or {})
+        return initial_ingestion.find_contacts(
+            author, {"name": "Massachusetts Institute of Technology"}, {"mit.edu"}, {}, web,
+            initial_ingestion.Cache("/nonexistent", enabled=False), self.Args, {"ror": None}, recent)
+
+    def test_publication_entry_keeps_only_affiliation_strings_with_an_address(self):
+        work = {"id": "https://openalex.org/W9", "title": "T", "publication_year": 2026, "authorships": [
+            {"author": {"id": "https://openalex.org/A1"}, "author_position": "first",
+             "raw_affiliation_strings": ["Dept of Chemistry, MIT. Correspondence: jane.doe@mit.edu", "MIT"]},
+            {"author": {"id": "https://openalex.org/A2"}, "raw_affiliation_strings": ["Other, x@y.org"]}]}
+        self.assertEqual(faculty.publication_entry(work, "A1")["_aff"], ["Dept of Chemistry, MIT. Correspondence: jane.doe@mit.edu"])
+        self.assertNotIn("_aff", faculty.publication_entry(work, None))
+        self.assertEqual(faculty.strip_transient([faculty.publication_entry(work, "A1")])[0].keys(),
+                         {"id", "title", "year", "date", "position"})
+
+    def test_email_from_the_papers_must_fit_name_and_university(self):
+        author = {"display_name": "Jane Doe", "id": "https://openalex.org/A1", "orcid": None}
+        got = self.find(author, recent=[{"_aff": ["MIT. jane.doe@mit.edu"]}])
+        self.assertEqual((got["email"], got["email_source"]), ("jane.doe@mit.edu", "paper_affiliation"))
+        for aff in ("MIT. someone.else@mit.edu", "Harvard. jane.doe@harvard.edu"):
+            self.assertIsNone(self.find(author, recent=[{"_aff": [aff]}])["email"], aff)
+
+    def test_europe_pmc_is_the_last_resort(self):
+        author = {"display_name": "Jane Doe", "id": "https://openalex.org/A1", "orcid": "https://orcid.org/0000-0001-0000-0000"}
+        url = ("https://www.ebi.ac.uk/europepmc/webservices/rest/search?resultType=core&format=json&pageSize=25"
+               "&sort=P_PDATE_D%20desc&query=AUTHORID%3A%220000-0001-0000-0000%22")
+        body = json.dumps({"resultList": {"result": [{"authorList": {"author": [
+            {"authorId": {"value": "0000-0001-0000-0000"}, "authorAffiliationDetailsList": {"authorAffiliation": [
+                {"affiliation": "MIT, Cambridge. jdoe@mit.edu"}, {"affiliation": "no address"}]}},
+            {"authorId": {"value": "0000-0002-0000-0000"}, "authorAffiliationDetailsList": {"authorAffiliation": [
+                {"affiliation": "MIT. other@mit.edu"}]}}]}}]}})
+        got = self.find(author, pages={url: body})
+        self.assertEqual((got["email"], got["email_source"]), ("jdoe@mit.edu", "europepmc"))
+        paper_first = self.find(author, pages={url: body}, recent=[{"_aff": ["jane.doe@mit.edu"]}])
+        self.assertEqual(paper_first["email_source"], "paper_affiliation")
+        self.assertIsNone(self.find(author, pages={url: "not json"})["email"])
+
+
 class EmbeddingTextTests(unittest.TestCase):
     def test_matches_browser_recipe(self):
         record = {"title": "Associate Professor of Chemistry", "primary_domain": "Materials Science",
