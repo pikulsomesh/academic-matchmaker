@@ -62,7 +62,7 @@ def run(data_dir, client, overlap_days=30, since=None, until=None):
     if since is None:
         last_run = meta.get("last_cdc_run") or meta.get("last_ingestion") or (date.today() - timedelta(days=31)).isoformat()
         since = (date.fromisoformat(last_run) - timedelta(days=overlap_days)).isoformat()
-    institution_ids = sorted({u["id"] for u in universities if u.get("id")})
+    institution_ids = sorted({i for u in universities for i in [u.get("id"), *(u.get("extra_openalex_ids") or [])] if i})
     log(f"Scanning works published {since}..{until} at {len(institution_ids)} institutions for {len(records)} faculty")
 
     new_by_author = {}

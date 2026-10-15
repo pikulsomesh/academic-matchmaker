@@ -848,7 +848,7 @@
       "openalex_search": [
         "University of Buenos Aires"
       ],
-      "openalex_id": "I3130568980",
+      "openalex_id": "I24354313",
       "directories": []
     },
     {
@@ -859,8 +859,16 @@
         "Institute of Science Tokyo",
         "Tokyo Institute of Technology"
       ],
-      "openalex_id": "I114531698",
-      "directories": []
+      "openalex_id": "I4400009020",
+      "directories": [],
+      "extra_openalex_ids": [
+        "I114531698",
+        "I125602781"
+      ],
+      "email_domains": [
+        "titech.ac.jp",
+        "tmd.ac.jp"
+      ]
     },
     {
       "rank": 86,
@@ -919,7 +927,7 @@
       "openalex_search": [
         "Osaka University"
       ],
-      "openalex_id": "I317356780",
+      "openalex_id": "I98285908",
       "directories": []
     },
     {
