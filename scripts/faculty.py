@@ -69,6 +69,13 @@ def publication_entry(work, author_id=None):
                       if a.get("author_position") == "first"), None)
         if first and first != author_id:
             entry["_fa"] = first
+    if author_id:
+        # Affiliation strings that carry an address ("... Correspondence: jane@uni.edu"); find_contacts vets them.
+        mine = next((a for a in work.get("authorships") or []
+                     if short_id((a.get("author") or {}).get("id")) == author_id), {})
+        raw = [t.strip()[:300] for t in mine.get("raw_affiliation_strings") or [] if isinstance(t, str) and "@" in t][:2]
+        if raw:
+            entry["_aff"] = raw
     funders = [(f.get("display_name") or "").strip()[:60] for f in work.get("funders") or [] if isinstance(f, dict)]
     funders = [f for f in funders if f][:2]
     if funders:
@@ -77,7 +84,7 @@ def publication_entry(work, author_id=None):
 
 
 def strip_transient(pubs):
-    """Drop the underscore-prefixed working keys (_fa, _funders) before publications are written."""
+    """Drop the underscore-prefixed working keys (_fa, _funders, _aff) before publications are written."""
     return [{k: v for k, v in p.items() if not k.startswith("_")} for p in pubs]
 
 
@@ -158,7 +165,7 @@ def merge_publications(existing, new_entries, limit=MAX_RECENT_PUBLICATIONS):
         kept = by_key.setdefault(key, pub)
         if pub.get("position") and not kept.get("position"):
             kept["position"] = pub["position"]  # backfill the role on records built before it existed
-        for key in ("_fa", "_funders"):
+        for key in ("_fa", "_funders", "_aff"):
             if pub.get(key) and not kept.get(key):
                 kept[key] = pub[key]
     ordered = sorted(by_key.values(), key=lambda p: (p.get("date") or f"{p.get('year') or 0}-00-00"), reverse=True)

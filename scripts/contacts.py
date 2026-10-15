@@ -332,3 +332,14 @@ def role_from_title(title):
         if any(word in text for word in words):
             return role
     return None
+
+
+# --- emails from papers --------------------------------------------------------------
+
+def vetted_email(candidates, name, institution_domains):
+    """First address in `candidates` (free text) that fits both the person's name and the university's domains."""
+    for text in candidates:
+        for email in extract_emails(text):
+            if email_matches_name(email, name) and email_matches_institution(email, institution_domains):
+                return email
+    return None

@@ -50,6 +50,9 @@ If the budget runs out mid-run, re-run the next day and it resumes from the cach
    - institutional URLs from the author's public ORCID record, scraped for email and title;
    - a public ORCID email on the institution's domain.
 
+   - last resorts for the address: an address in the affiliation string of the person's own recent papers
+     (OpenAlex `raw_affiliation_strings`, already fetched), then the author affiliations of their Europe PMC
+     papers (one free request per ORCID). Both must fit the person's name and the university's domain.
    - titles: when no page or directory gives one, the person's current role at this university from their
      ORCID employment history (`title_source: orcid_employment`; `role` is faculty, researcher, postdoc,
      student or emeritus; `orcid_affiliation` says whether their current ORCID jobs are here, elsewhere or absent).

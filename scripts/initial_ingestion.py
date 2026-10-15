@@ -150,11 +150,12 @@ def fetch_recent_works_batched(client, cache, author_ids, batch_size=25, months=
 
     One OR-filtered query per batch of authors, newest first; authors still short of
     MAX_RECENT_PUBLICATIONS after `max_pages` pages fall back to a per-author query.
+    Cached as works-v2: entries now carry the affiliation strings (_aff) that email lookup reads.
     """
     result = {}
     todo = []
     for author_id in author_ids:
-        cached = cache.get("works", author_id)
+        cached = cache.get("works-v2", author_id)
         if cached is not None:
             result[author_id] = cached
         else:
@@ -179,7 +180,7 @@ def fetch_recent_works_batched(client, cache, author_ids, batch_size=25, months=
                 break
         for aid, pubs in found.items():
             if len(pubs) >= MAX_RECENT_PUBLICATIONS:
-                result[aid] = cache.put("works", aid, pubs)
+                result[aid] = cache.put("works-v2", aid, pubs)
     for author_id in author_ids:
         if author_id not in result:
             result[author_id] = fetch_recent_works(client, cache, author_id)
@@ -187,7 +188,7 @@ def fetch_recent_works_batched(client, cache, author_ids, batch_size=25, months=
 
 
 def fetch_recent_works(client, cache, author_id):
-    cached = cache.get("works", author_id)
+    cached = cache.get("works-v2", author_id)
     if cached is not None:
         return cached
     data = client.get("works", {
@@ -197,7 +198,7 @@ def fetch_recent_works(client, cache, author_id):
         "select": WORK_SELECT,
     })
     pubs = [publication_entry(w, author_id) for w in data.get("results", [])]
-    return cache.put("works", author_id, [p for p in pubs if p["title"]])
+    return cache.put("works-v2", author_id, [p for p in pubs if p["title"]])
 
 
 # --- step 4: contacts ------------------------------------------------------------------
@@ -261,6 +262,33 @@ def fetch_orcid(web, cache, orcid_url):
     return cache.put("orcid-record", orcid, result)
 
 
+def fetch_europepmc_affiliations(web, cache, orcid_url):
+    """Author affiliation strings from the person's recent Europe PMC papers (corresponding authors' emails appear
+    there). One free request per ORCID; only strings that contain an '@' are kept."""
+    orcid = orcid_url.rstrip("/").rsplit("/", 1)[-1]
+    cached = cache.get("europepmc", orcid)
+    if cached is not None:
+        return cached
+    url = ("https://www.ebi.ac.uk/europepmc/webservices/rest/search?resultType=core&format=json&pageSize=25"
+           f"&sort=P_PDATE_D%20desc&query=AUTHORID%3A%22{orcid}%22")
+    body = web.get_text(url, headers={"Accept": "application/json"})
+    found = []
+    if body:
+        try:
+            results = ((json.loads(body).get("resultList") or {}).get("result")) or []
+        except ValueError:
+            results = []
+        for result in results:
+            for au in (result.get("authorList") or {}).get("author") or []:
+                if ((au.get("authorId") or {}).get("value") or "") != orcid:
+                    continue
+                for aff in (au.get("authorAffiliationDetailsList") or {}).get("authorAffiliation") or []:
+                    text = (aff.get("affiliation") or "").strip()
+                    if "@" in text and text[:300] not in found:
+                        found.append(text[:300])
+    return cache.put("europepmc", orcid, found[:10])
+
+
 def scrape_profile(web, cache, url, name, domains):
     key = f"{url}|{name}"
     cached = cache.get("profile", key)
@@ -283,14 +311,16 @@ def load_directory(web, cache, directory):
     return cache.put("directory", f"{url}|{selector}", entries)
 
 
-def find_contacts(author, uni, domains, directory_index, web, cache, args, inst=None):
+def find_contacts(author, uni, domains, directory_index, web, cache, args, inst=None, recent=()):
     name = author["display_name"]
     found = {"email": None, "profile_url": None, "profile_source": None, "title": None, "title_source": None,
-             "orcid_affiliation": None}
+             "orcid_affiliation": None, "email_source": None}
 
     entry = directory_index.get(contacts.name_key(name))
     if entry:
         found["email"] = entry.get("email")
+        if found["email"]:
+            found["email_source"] = "directory"
         found["title"] = entry.get("title")
         if found["title"]:
             found["title_source"] = "directory"
@@ -306,7 +336,8 @@ def find_contacts(author, uni, domains, directory_index, web, cache, args, inst=
 
     if found["profile_url"] and not args.skip_scrape and (not found["email"] or not found["title"]):
         scraped = scrape_profile(web, cache, found["profile_url"], name, domains)
-        found["email"] = found["email"] or scraped.get("email")
+        if not found["email"] and scraped.get("email"):
+            found["email"], found["email_source"] = scraped["email"], "profile_page"
         if not found["title"] and scraped.get("title"):
             found["title"], found["title_source"] = scraped["title"], "profile_page"
 
@@ -320,8 +351,20 @@ def find_contacts(author, uni, domains, directory_index, web, cache, args, inst=
     if not found["email"]:
         for email in orcid["emails"]:
             if contacts.email_matches_institution(email, domains):
-                found["email"] = email
+                found["email"], found["email_source"] = email, "orcid"
                 break
+
+    # Last resorts for the address, both vetted against the person's name and the university's domains:
+    # affiliation strings on their recent papers (already fetched, so free), then Europe PMC.
+    if not found["email"] and domains:
+        paper_text = [t for p in recent for t in p.get("_aff") or []]
+        email = contacts.vetted_email(paper_text, name, domains)
+        if email:
+            found["email"], found["email_source"] = email, "paper_affiliation"
+        elif author.get("orcid") and not args.skip_orcid:
+            email = contacts.vetted_email(fetch_europepmc_affiliations(web, cache, author["orcid"]), name, domains)
+            if email:
+                found["email"], found["email_source"] = email, "europepmc"
 
     if not found["profile_url"]:
         if author.get("orcid"):
@@ -357,6 +400,7 @@ def build_record(author, uni, inst, recent, found):
         "profile_source": found["profile_source"],
         "role": contacts.role_from_title(found["title"]),
         "title_source": found.get("title_source"),
+        "email_source": found.get("email_source") if found["email"] else None,
         "orcid_affiliation": found.get("orcid_affiliation"),
         "last_publication_year": last_publication_year(author),
     }
@@ -506,7 +550,7 @@ def build(args, client=None, web=None):
             if deadline is not None and time.monotonic() >= deadline:
                 raise Paused("time budget reached")
             recent = recent_by_author[short_id(author["id"])]
-            found = find_contacts(author, uni, domains, directory_index, web, cache, args, inst)
+            found = find_contacts(author, uni, domains, directory_index, web, cache, args, inst, recent)
             return build_record(author, uni, inst, recent, found)
 
         with ThreadPoolExecutor(max_workers=args.workers) as pool:
