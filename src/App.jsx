@@ -8,7 +8,9 @@ import FacultyDetailModal from './components/FacultyDetailModal.jsx'
 import AboutModal from './components/AboutModal.jsx'
 import CopyLinkButton from './components/CopyLinkButton.jsx'
 import ShortlistModal from './components/ShortlistModal.jsx'
-import { loadPipelineStatus } from './data/facultyStore.js'
+import DemoPage from './components/DemoPage.jsx'
+import LaureateMarker from './components/LaureateMarker.jsx'
+import { loadLaureateEval, loadPipelineStatus } from './data/facultyStore.js'
 import useFacultySearch, { SORTS } from './hooks/useFacultySearch.js'
 import useLocalAI from './hooks/useLocalAI.js'
 import useMatcherBridge from './hooks/useMatcherBridge.js'
@@ -50,6 +52,11 @@ export default function App() {
   useEffect(() => {
     loadPipelineStatus().then(setDataStatus)
   }, [])
+  const [laureateData, setLaureateData] = useState(undefined)
+  useEffect(() => {
+    loadLaureateEval().then(setLaureateData)
+  }, [])
+  const [view, setView] = useState(() => parseHash(window.location.hash).view)
   const [selected, setSelected] = useState(null)
   const [aboutOpen, setAboutOpen] = useState(false)
   const [shortlistOpen, setShortlistOpen] = useState(false)
@@ -74,9 +81,10 @@ export default function App() {
       institution,
       domains,
       researcher: selected?.id ?? pendingResearcher,
+      view,
     })
     if (hash !== window.location.hash) window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}${hash}`)
-  }, [query, sort, search.sortChosen, country, institution, domains, selected, pendingResearcher])
+  }, [query, sort, search.sortChosen, country, institution, domains, selected, pendingResearcher, view])
 
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [visible, setVisible] = useState(PAGE_SIZE)
@@ -92,9 +100,16 @@ export default function App() {
         onShortlistClick={() => setShortlistOpen(true)}
         shortlistCount={shortlist.entries.length}
         facultyCount={coverage.totalRows || search.faculty.length}
+        view={view}
+        onViewChange={setView}
+        laureateData={laureateData}
       />
 
       <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-8 sm:px-6 lg:py-10">
+        {view === 'demo' ? (
+          <DemoPage />
+        ) : (
+          <>
         <div className="mb-8 max-w-3xl">
           <h1 className="text-3xl font-semibold tracking-tight text-charcoal sm:text-4xl">
             Find researchers who share your interests.
@@ -252,6 +267,8 @@ export default function App() {
             )}
           </section>
         </div>
+          </>
+        )}
       </main>
 
       <footer className="border-t border-gray-100">
@@ -260,7 +277,8 @@ export default function App() {
           <button type="button" onClick={() => setAboutOpen(true)} className="font-medium text-cardinal hover:underline">
             Read the full disclaimer
           </button>
-          .
+          .{' '}
+          <LaureateMarker data={laureateData} onClick={() => setView('demo')} />
           {dataStatus?.last_success_at && (
             <p className="mt-1">
               Data updated {new Date(dataStatus.last_success_at).toLocaleDateString(undefined, { dateStyle: 'medium' })}

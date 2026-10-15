@@ -1,6 +1,7 @@
 import { GraduationCap, Info, Star } from 'lucide-react'
+import LaureateMarker from './LaureateMarker.jsx'
 
-export default function Navbar({ onAboutClick, onShortlistClick, shortlistCount = 0, facultyCount }) {
+export default function Navbar({ onAboutClick, onShortlistClick, shortlistCount = 0, facultyCount, view = 'search', onViewChange, laureateData }) {
   return (
     <header className="sticky top-0 z-30 border-b border-gray-100 bg-white/90 backdrop-blur">
       <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4 sm:px-6">
@@ -18,6 +19,24 @@ export default function Navbar({ onAboutClick, onShortlistClick, shortlistCount 
           </span>
         </a>
         <div className="flex shrink-0 items-center gap-2">
+        {onViewChange && (
+          <>
+            {['search', 'demo'].map((v) => (
+              <button
+                key={v}
+                type="button"
+                onClick={() => onViewChange(v)}
+                aria-current={view === v ? 'page' : undefined}
+                className={`rounded-xl px-3 py-2 text-sm font-medium transition ${view === v ? 'bg-cardinal/10 text-cardinal' : 'text-charcoal hover:text-cardinal'}`}
+              >
+                {v === 'search' ? 'Find researchers' : 'Demo'}
+              </button>
+            ))}
+            <span className="hidden md:inline">
+              <LaureateMarker data={laureateData} compact onClick={() => onViewChange('demo')} />
+            </span>
+          </>
+        )}
         {onShortlistClick && (
           <button
             type="button"

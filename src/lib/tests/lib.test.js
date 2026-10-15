@@ -58,12 +58,12 @@ test('CSV quotes commas, quotes and newlines and defuses formulas', () => {
 })
 
 test('hash state round-trips and ignores unknown sorts', () => {
-  const state = { query: 'graph neural', sort: 'citations', country: 'US', institution: 'MIT & Co', domains: ['Physics', 'Optics'], researcher: 'A5029' }
+  const state = { query: 'graph neural', sort: 'citations', country: 'US', institution: 'MIT & Co', domains: ['Physics', 'Optics'], researcher: 'A5029', view: 'search' }
   const hash = buildHash(state)
   assert.deepEqual(parseHash(hash), state)
   assert.equal(buildHash({}), '')
   assert.equal(parseHash('#sort=evil').sort, null)
-  assert.deepEqual(parseHash(''), { query: '', sort: null, country: '', institution: '', domains: [], researcher: '' })
+  assert.deepEqual(parseHash(''), { query: '', sort: null, country: '', institution: '', domains: [], researcher: '', view: 'search' })
 })
 
 test('find contact searches the university site, or the university name without a homepage', () => {
@@ -107,4 +107,26 @@ test('lab signals read the pipeline fields and tolerate their absence', async ()
   assert.equal(outputTrend(5, 5), 'steady')
   assert.equal(outputTrend(2, 1), 'steady')
   assert.equal(outputTrend(null, 5), null)
+})
+
+test('laureate marker reflects the test status and counts', async () => {
+  const { laureateMarker, runLabel } = await import('../laureate.js')
+  const summary = { people: 10, runs_attempted: 8, runs_passed: 7, people_unresolved: 2 }
+  assert.deepEqual(laureateMarker({ status: 'passing', summary }), {
+    tone: 'pass',
+    label: 'Prize-winner test passing',
+    detail: '7 of 8 matcher runs passed, 2 of 10 laureates could not be identified',
+  })
+  assert.equal(laureateMarker({ status: 'failing', summary }).tone, 'fail')
+  assert.equal(laureateMarker({ status: 'error', reason: 'boom' }).detail, 'boom')
+  assert.equal(laureateMarker(null).tone, 'idle')
+  assert.equal(runLabel({ status: 'passed', top_score: 0.512 }).text, 'Top match 51%')
+  assert.equal(runLabel({ status: 'skipped', reason: 'no CV' }).state, 'skipped')
+})
+
+test('the demo view round-trips through the hash', () => {
+  assert.equal(parseHash('#view=demo').view, 'demo')
+  assert.equal(parseHash('#q=x').view, 'search')
+  assert.equal(buildHash({ view: 'demo' }), '#view=demo')
+  assert.equal(buildHash({ view: 'search' }), '')
 })

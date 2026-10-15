@@ -60,6 +60,13 @@ Vectors are mean pooled and L2 normalized; `int8` stores `round(x * 127)`, `floa
 
 Sections with no data are left out. The first visit downloads several hundred MB of model weights from the Hugging Face Hub; the browser caches them afterwards.
 
+## Prize-winner test and Demo tab
+
+`eval/laureates.json` lists the 2026 Fields Medal and Nobel Prize winners. After every data refresh the pipeline matches each of
+them (from their ORCID / OpenAlex profile and, when `eval/cvs/<id>.pdf` exists, their CV) and writes `public/data/laureate_eval.json`.
+The site's **Demo** tab shows the matches and the connections behind them, and a pass/fail marker (navbar and footer) shows whether
+the test is passing. See `eval/README.md`.
+
 ## Deploy
 
 Pushing to `main` runs `.github/workflows/deploy.yml`. In the repo's **Settings → Pages**, set **Source** to **GitHub Actions** once.
