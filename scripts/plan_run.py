@@ -45,8 +45,12 @@ def site_reads_shards(src_dir=SRC_DIR):
 
 
 def tier_sizes(coverage):
+    """Tier sizes up to target_per_institution (when set), so lowering the target holds growth."""
     sizes = sorted({int(t["per_institution"]) for t in coverage.get("tiers") or []})
-    return sizes or [int(coverage.get("target_per_institution", 200))]
+    target = coverage.get("target_per_institution")
+    if sizes and target:
+        sizes = [size for size in sizes if size <= int(target)] or sizes[:1]
+    return sizes or [int(target or 200)]
 
 
 def tier_for(coverage, per_institution):

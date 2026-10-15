@@ -140,6 +140,13 @@ class QualityGateTests(unittest.TestCase):
         report, _ = self.check(allow_shrink=True)
         self.assertEqual(report.errors, [])
 
+    def test_repinned_university_is_not_a_shrink(self):
+        quality_gate.snapshot(self.dir, self.prev)
+        path = os.path.join(self.dir, "universities.json")
+        faculty.write_json(path, [dict(u, id="I2") for u in faculty.read_json(path, [])])
+        report, _ = self.check()
+        self.assertEqual(report.errors, [])
+
     def test_missing_cluster_and_record_files_fail(self):
         os.remove(os.path.join(self.dir, "vectors", "0.json"))
         report, _ = self.check()
@@ -147,6 +154,24 @@ class QualityGateTests(unittest.TestCase):
         os.remove(os.path.join(self.dir, "faculty", "I1.json"))
         report, _ = self.check()
         self.assertTrue(any(e.startswith("record_files") for e in report.errors), report.errors)
+
+    def test_shared_institution_ids_fail(self):
+        config = os.path.join(self.prev, "config.json")
+        faculty.write_json(config, {"universities": [{"name": "A", "openalex_id": "I1"},
+                                                     {"name": "B", "openalex_id": "I2", "extra_openalex_ids": ["I3"]}]})
+        report, _ = self.check(config_path=config)
+        self.assertEqual(report.errors, [])
+        faculty.write_json(config, {"universities": [{"name": "Tsinghua", "openalex_id": "I1"},
+                                                     {"name": "Berkeley", "openalex_id": "I1"}]})
+        report, _ = self.check(config_path=config)
+        self.assertTrue(any(e.startswith("institution_ids") for e in report.errors), report.errors)
+
+    def test_small_university_warns(self):
+        meta = faculty.read_json(os.path.join(self.dir, "metadata.json"), {})
+        faculty.write_json(os.path.join(self.dir, "metadata.json"), dict(meta, per_institution=1000))
+        report, _ = self.check()
+        self.assertEqual(report.errors, [])
+        self.assertTrue(any("U (120)" in w for w in report.warnings), report.warnings)
 
     def test_over_budget_and_missing_files_fail(self):
         report, _ = self.check(budget_mb=0.001)
