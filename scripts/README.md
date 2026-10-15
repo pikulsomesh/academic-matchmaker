@@ -50,6 +50,10 @@ If the budget runs out mid-run, re-run the next day and it resumes from the cach
    - institutional URLs from the author's public ORCID record, scraped for email and title;
    - a public ORCID email on the institution's domain.
 
+   - titles: when no page or directory gives one, the person's current role at this university from their
+     ORCID employment history (`title_source: orcid_employment`; `role` is faculty, researcher, postdoc,
+     student or emeritus; `orcid_affiliation` says whether their current ORCID jobs are here, elsewhere or absent).
+
    Obfuscated emails (`[at]`, `(at)`, `{at}`, ` at `, and `[dot]`/` dot `) are normalized, and an
    email is only accepted when it matches the person's name and the institution's domain.
    When no institutional page is found, `profile_url` falls back to ORCID, then OpenAlex.

@@ -237,3 +237,98 @@ def same_site(url, institution_domains):
         return registered_domain(urlparse(url).hostname) in institution_domains
     except ValueError:
         return False
+
+
+# --- ORCID employment ----------------------------------------------------------------
+
+# Words that say nothing about which university an organization is.
+_ORG_FILLER = {"the", "of", "and", "at", "de", "del", "der", "des", "di", "du", "la", "le", "y", "e", "für", "fur",
+               "university", "universite", "universitat", "universidad", "universita", "universiteit", "universitet",
+               "universidade", "universitaet", "uni", "u"}
+_ROLE_ORDER = ("professor", "lecturer", "reader", "chair", "principal investigator", "group leader", "fellow",
+               "scientist", "researcher")
+
+
+def org_tokens(name):
+    name = unicodedata.normalize("NFKD", name or "")
+    name = "".join(c for c in name if not unicodedata.combining(c)).lower()
+    return {t for t in re.split(r"[^a-z0-9]+", name) if t and t not in _ORG_FILLER}
+
+
+def org_matches(org_name, org_ror, university_names, university_rors=()):
+    """True when an ORCID employment's organization is this university (by ROR, else by name: every
+    distinctive word of the university's name appears in the organization's, or the other way round)."""
+    if org_ror and university_rors:
+        return org_ror.rstrip("/").rsplit("/", 1)[-1] in {r.rstrip("/").rsplit("/", 1)[-1] for r in university_rors if r}
+    org = org_tokens(org_name)
+    for name in university_names:
+        uni = org_tokens(name)
+        if org and uni and (uni <= org or org <= uni):
+            return True
+    return False
+
+
+def parse_orcid_employments(record):
+    """ORCID /record (or /employments) JSON -> [{org, ror, role, department, start, current}]."""
+    if not isinstance(record, dict):
+        return []
+    groups = ((record.get("activities-summary") or {}).get("employments") or record).get("affiliation-group") or []
+    out = []
+    for group in groups:
+        for summary in group.get("summaries") or []:
+            emp = summary.get("employment-summary") or {}
+            org = emp.get("organization") or {}
+            dis = org.get("disambiguated-organization") or {}
+            ror = dis.get("disambiguated-organization-identifier") if dis.get("disambiguation-source") == "ROR" else None
+            start = ((emp.get("start-date") or {}).get("year") or {}).get("value")
+            out.append({"org": org.get("name"), "ror": ror, "role": (emp.get("role-title") or "").strip() or None,
+                        "department": (emp.get("department-name") or "").strip() or None,
+                        "start": int(start) if str(start or "").isdigit() else None,
+                        "current": not emp.get("end-date")})
+    return out
+
+
+def employment_title(employments, university_names, university_rors=()):
+    """(title, affiliation) from ORCID employments. title: the role at this university, e.g. 'Professor,
+    Psychiatry and Human Behavior'. affiliation: 'match' (a current job here), 'elsewhere' (current jobs, none
+    here), or None (no current jobs listed)."""
+    current = [e for e in employments if e["current"] and e.get("org")]
+    here = [e for e in current if org_matches(e["org"], e.get("ror"), university_names, university_rors)]
+    affiliation = "match" if here else ("elsewhere" if current else None)
+
+    def rank(e):
+        role = (e.get("role") or "").lower()
+        order = next((i for i, word in enumerate(_ROLE_ORDER) if word in role), len(_ROLE_ORDER))
+        return (e.get("role") is None, order, -(e.get("start") or 0))
+
+    for e in sorted(here, key=rank):
+        if e.get("role"):
+            role = re.sub(r"\s+", " ", e["role"]).strip(" ,;")
+            role = {"prof": "Professor", "prof.": "Professor"}.get(role.lower(), role)
+            role = role[0].upper() + role[1:]
+            if e.get("department") and e["department"].lower() not in role.lower():
+                role = f"{role}, {re.sub(r'\s+', ' ', e['department']).strip()}"
+            return role[:160], affiliation
+    return None, affiliation
+
+
+_ROLE_RULES = (
+    ("student", ("phd student", "doctoral student", "doctoral candidate", "phd candidate", "graduate student")),
+    ("postdoc", ("postdoc", "post-doc", "postdoctoral")),
+    ("emeritus", ("emeritus", "emerita", "retired")),
+    ("faculty", ("professor", "lecturer", "reader", "chair ", "principal investigator", "group leader",
+                   "head of", "director")),
+    ("researcher", ("fellow", "scientist", "researcher", "research associate", "investigator", "staff")),
+)
+
+
+def role_from_title(title):
+    """Coarse role from a title: faculty (professor, lecturer, group leader...), researcher, postdoc, student, emeritus,
+    or None when unknown."""
+    text = f" {(title or '').lower()} "
+    if not text.strip():
+        return None
+    for role, words in _ROLE_RULES:
+        if any(word in text for word in words):
+            return role
+    return None
