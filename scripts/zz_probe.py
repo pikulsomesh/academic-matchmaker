@@ -32,13 +32,16 @@ for n, r in enumerate(sample, 1):
     u = unis.get(r["institution_id"], {}); doms = domains_for(u)
     stats["n"] += 1; stats["had_email"] += bool(r.get("email"))
     # (b) OpenAlex raw affiliation strings on the author's last 3 years of works: one request, 50 works
-    works = oa("works", filter=f"author.id:{r['id']},from_publication_date:2023-01-01", sort="publication_date:desc",
-               select="id,authorships,doi,ids", **{"per-page": 50})["results"]
+    try:
+        works = oa("works", filter=f"author.id:{r['id']},from_publication_date:2023-01-01", sort="publication_date:desc",
+                   select="id,authorships,doi,ids", **{"per-page": 50})["results"]
+    except Exception as ex:
+        print("works error", ex); works = []
     stats["works_scanned"] += len(works)
     found_b, any_b = None, False
     for w in works:
         for a in w.get("authorships") or []:
-            if (a.get("author") or {}).get("id", "").endswith(r["id"]):
+            if ((a.get("author") or {}).get("id") or "").endswith(r["id"]):
                 for s in a.get("raw_affiliation_strings") or []:
                     for e in EMAIL.findall(s):
                         any_b = True
