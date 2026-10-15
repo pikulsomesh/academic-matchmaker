@@ -153,6 +153,47 @@ class PlanTests(unittest.TestCase):
             shutil.rmtree(d)
 
 
+class IngestUnitTests(unittest.TestCase):
+    UNIS = [{"name": n} for n in ("Massachusetts Institute of Technology", "Imperial College London",
+                                  "Universidad de Buenos Aires", "ETH Zurich")]
+
+    def test_one_job_per_university_with_stable_keys(self):
+        units, cap = plan_run.ingest_units(self.UNIS, legacy_shards=3, daily_requests=9000)
+        self.assertEqual([u["key"] for u in units], ["massachusetts-institute-of-technology", "imperial-college-london",
+                                                     "universidad-de-buenos-aires", "eth-zurich"])
+        self.assertEqual([u["legacy_shard"] for u in units], [0, 1, 2, 0])
+        self.assertEqual(cap, 2250)
+        grown, _ = plan_run.ingest_units([{"name": "Aalto University"}] + self.UNIS + [{"name": "Rice University"}])
+        self.assertEqual({u["name"]: u["key"] for u in units}.items() <= {u["name"]: u["key"] for u in grown}.items(), True,
+                         "adding universities, anywhere in the list, keeps every existing cache key")
+
+    def test_limits(self):
+        self.assertEqual(plan_run.ingest_units([{"name": f"U{i}"} for i in range(200)])[1], 500)
+        with self.assertRaises(SystemExit):
+            plan_run.ingest_units([{"name": f"U{i}"} for i in range(251)])
+        with self.assertRaises(SystemExit):
+            plan_run.ingest_units([{"name": "A B"}, {"name": "A-B"}])
+
+
+class CacheTests(unittest.TestCase):
+    def test_prune_keeps_only_what_the_run_used_and_marks_dirty(self):
+        tmp = tempfile.mkdtemp()
+        try:
+            old = initial_ingestion.Cache(os.path.join(tmp, "c"))
+            old.put("authors", "mine", [1])
+            old.put("authors", "sibling", [2])
+            marker = os.path.join(tmp, "dirty")
+            cache = initial_ingestion.Cache(os.path.join(tmp, "c"), dirty_marker=marker)
+            self.assertEqual(cache.get("authors", "mine"), [1])
+            self.assertFalse(os.path.exists(marker), "reading alone does not change the cache")
+            self.assertEqual(cache.prune(), 1)
+            self.assertTrue(os.path.exists(marker))
+            self.assertIsNone(cache.get("authors", "sibling"))
+            self.assertEqual(cache.get("authors", "mine"), [1])
+        finally:
+            shutil.rmtree(tmp)
+
+
 class TierTests(unittest.TestCase):
     COVERAGE = {"initial_per_institution": 1000, "tiers": [
         {"per_institution": 1000, "min_works": 20}, {"per_institution": 3000, "min_works": 10},
@@ -624,6 +665,26 @@ class PipelineTests(unittest.TestCase):
         merged, _ = faculty.load_records(out)
         self.assertEqual(sorted((r["id"], r["email"], r["title"]) for r in merged), single)
         self.assertEqual(json.loads(pathlib.Path(out, "metadata.json").read_text())["faculty_count"], 3)
+
+    def test_only_builds_the_named_university(self):
+        config = json.loads(pathlib.Path(self.config).read_text())
+        config["universities"].append(dict(config["universities"][0], rank=2, name="Other University", openalex_id="I5"))
+        pathlib.Path(self.config).write_text(json.dumps(config))
+        part = os.path.join(self.tmp, "p.json")
+        marker = os.path.join(self.tmp, "dirty")
+        initial_ingestion.main(["--config", self.config, "--per-institution", "10", "--only", "Other University",
+                                "--partial-out", part, "--prune-cache", "--dirty-marker", marker],
+                               client=FakeOpenAlex(self.authors, self.works), web=self.web)
+        self.assertEqual([u["name"] for u in json.loads(pathlib.Path(part).read_text())["universities"]],
+                         ["Other University"])
+        self.assertTrue(os.path.exists(marker))
+        os.remove(marker)
+        initial_ingestion.main(["--config", self.config, "--per-institution", "10", "--only", "Other University",
+                                "--partial-out", part, "--prune-cache", "--dirty-marker", marker],
+                               client=FakeOpenAlex(self.authors, self.works), web=self.web)
+        self.assertFalse(os.path.exists(marker), "a second, fully cached run leaves nothing new to save")
+        with self.assertRaises(SystemExit):
+            initial_ingestion.main(["--config", self.config, "--only", "Nowhere"], client=FakeOpenAlex([], []), web=self.web)
 
     def test_merged_university_pools_its_predecessor_ids(self):
         config = json.loads(pathlib.Path(self.config).read_text())
