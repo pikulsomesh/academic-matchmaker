@@ -15,14 +15,12 @@ OpenAlex budget or one job's time limit completes over several days without anyo
 import argparse
 import json
 import os
-import re
 import sys
 
 # Standard library only: this runs before the pipeline's dependencies are installed.
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA_DIR = os.path.join(ROOT, "public", "data")
 COVERAGE_CONFIG = os.path.join(ROOT, "scripts", "config", "coverage.json")
-UNIVERSITIES_CONFIG = os.path.join(ROOT, "scripts", "config", "top100_qs2026.json")
 SRC_DIR = os.path.join(ROOT, "src")
 MONTHLY_CRON = "0 0 1 * *"
 
@@ -47,12 +45,8 @@ def site_reads_shards(src_dir=SRC_DIR):
 
 
 def tier_sizes(coverage):
-    """Tier sizes up to target_per_institution (when set), so lowering the target holds growth."""
     sizes = sorted({int(t["per_institution"]) for t in coverage.get("tiers") or []})
-    target = coverage.get("target_per_institution")
-    if sizes and target:
-        sizes = [size for size in sizes if size <= int(target)] or sizes[:1]
-    return sizes or [int(target or 200)]
+    return sizes or [int(coverage.get("target_per_institution", 200))]
 
 
 def tier_for(coverage, per_institution):
@@ -113,31 +107,6 @@ def plan(event, schedule, mode_input, per_institution_input, metadata, coverage,
     return "full", bigger[0], f"expanding coverage from {built} to {bigger[0]} per institution"
 
 
-MAX_JOBS = 250  # GitHub runs at most 256 jobs per matrix
-
-
-def slug(name):
-    return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
-
-
-def ingest_units(universities, legacy_shards=50, daily_requests=9000, min_cap=500):
-    """One ingest job per university, so each keeps its own cache under a key that never changes when the
-    list grows. -> (units, per-job OpenAlex request cap).
-
-    legacy_shard is where the university's progress sat under the old position % 50 layout: its first job
-    restores that cache, then saves it under the university's own key (pruned to that university)."""
-    if len(universities) > MAX_JOBS:
-        raise SystemExit(f"{len(universities)} universities is more than one run's {MAX_JOBS} jobs; "
-                         "beyond this, build from the OpenAlex snapshot instead (see scripts/README.md)")
-    units = [{"key": slug(u["name"]), "name": u["name"], "legacy_shard": position % legacy_shards}
-             for position, u in enumerate(universities)]
-    keys = [u["key"] for u in units]
-    if len(set(keys)) != len(keys):
-        raise SystemExit("Two universities in the config have the same name")
-    cap = max(min_cap, daily_requests // max(1, len(units)))
-    return units, cap
-
-
 def main(argv=None):
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--event", default=os.environ.get("GITHUB_EVENT_NAME", ""))
@@ -157,15 +126,13 @@ def main(argv=None):
     out = os.environ.get("GITHUB_OUTPUT")
     coverage = read_json(COVERAGE_CONFIG)
     tier = tier_for(coverage, per_institution)
-    units, request_cap = ingest_units(read_json(UNIVERSITIES_CONFIG).get("universities") or [],
-                                      int(coverage.get("ingest_shards", 50)),
-                                      int(coverage.get("openalex_daily_requests", 9000)))
+    shards = max(1, int(coverage.get("ingest_shards", 50)))
     lines = (f"mode={mode}\nper_institution={per_institution}\n"
              f"min_works={tier.get('min_works', 20)}\nmin_citations={tier.get('min_citations', 500)}\n"
              f"min_h_index={tier.get('min_h_index', 10)}\nwindow_years={coverage.get('window_years', 10)}\n"
              f"size_budget_mb={budget_mb(coverage, bool(os.environ.get('HF_DATASET_REPO')))}\n"
              f"search_index_rows={coverage.get('search_index_rows', 100000)}\n"
-             f"units={json.dumps(units, separators=(',', ':'))}\njobs={len(units)}\nrequest_cap={request_cap}\n")
+             f"shards={shards}\nshard_list={json.dumps(list(range(shards)))}\n")
     if out:
         with open(out, "a", encoding="utf-8") as fh:
             fh.write(lines)

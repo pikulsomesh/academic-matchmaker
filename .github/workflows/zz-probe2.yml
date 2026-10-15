@@ -1,0 +1,19 @@
+name: Temporary probe 2 (removed before merge)
+on:
+  push:
+    branches: [claude/scratch-probe]
+    paths: [.github/workflows/zz-probe2.yml, scripts/zz_probe2.py]
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      OPENALEX_API_KEY: ${{ secrets.OPENALEX_API_KEY }}
+      OPENALEX_MAILTO: ${{ vars.OPENALEX_MAILTO }}
+      HF_DATASET_REPO: ${{ vars.HF_DATASET_REPO }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: pip install requests beautifulsoup4 "huggingface_hub>=0.25"
+      - run: python scripts/zz_probe2.py

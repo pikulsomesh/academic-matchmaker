@@ -1,6 +1,6 @@
 {
   "initial_per_institution": 1000,
-  "target_per_institution": 1000,
+  "target_per_institution": 50000,
   "window_years": 10,
   "size_budget_mb": 800,
   "hosted_size_budget_mb": 8000,
@@ -38,6 +38,5 @@
     }
   ],
   "vector_format": "bits",
-  "ingest_shards": 50,
-  "openalex_daily_requests": 9000
+  "ingest_shards": 50
 }

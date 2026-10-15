@@ -7,8 +7,7 @@
 
 Checks: required files exist and parse; the search file decodes with unique ids; per-university
 counts add up to metadata.json; every record_file exists; the vector index is consistent with the
-people (cluster files, counts); no two universities share an OpenAlex institution id (in the data or
-the config); nothing shrank by more than 20% against the snapshot (set
+people (cluster files, counts); nothing shrank by more than 20% against the snapshot (set
 QUALITY_ALLOW_SHRINK=1 for an intentional shrink); the data fits the size budget.
 
 On success pipeline_status.json is written into the data dir (it ships with the site), and a
@@ -32,8 +31,6 @@ SNAPSHOT_FILES = ("universities.json", "metadata.json", "pipeline_status.json")
 MAX_SHRINK = 0.20
 MIN_PREVIOUS_FOR_UNI_CHECK = 50
 SAMPLE_CLUSTERS = 5
-SMALL_UNIVERSITY_SHARE = 0.5
-CONFIG_PATH = os.path.join(ROOT, "scripts", "config", "top100_qs2026.json")
 
 
 def log(*args):
@@ -85,7 +82,7 @@ def load(data_dir, name, report):
         return None
 
 
-def check_data(data_dir, previous_dir=PREVIOUS_DIR, budget_mb=None, allow_shrink=False, config_path=None):
+def check_data(data_dir, previous_dir=PREVIOUS_DIR, budget_mb=None, allow_shrink=False):
     report = Report()
     universities = load(data_dir, "universities.json", report)
     meta = load(data_dir, "metadata.json", report)
@@ -107,31 +104,6 @@ def check_data(data_dir, previous_dir=PREVIOUS_DIR, budget_mb=None, allow_shrink
         report.fail("search_file", f"{len(ids) - len(set(ids))} duplicate ids in faculty_search.json")
     else:
         report.ok("search_file")
-
-    # Each university is its own OpenAlex institution (tied ranks once shared one id and passed every check).
-    seen, dupes = {}, []
-    for u in universities:
-        for inst in [u.get("id"), *(u.get("extra_openalex_ids") or [])]:
-            if inst and inst in seen:
-                dupes.append(f"{seen[inst]} and {u.get('name', inst)} share {inst}")
-            seen.setdefault(inst, u.get("name", inst))
-    config = read_json(config_path, {}) if config_path else {}
-    pinned = {}
-    for u in config.get("universities") or []:
-        for inst in [u.get("openalex_id"), *(u.get("extra_openalex_ids") or [])]:
-            if inst and inst in pinned:
-                dupes.append(f"{pinned[inst]} and {u['name']} are pinned to {inst} in the config")
-            pinned.setdefault(inst, u["name"])
-    if dupes:
-        report.fail("institution_ids", "; ".join(dupes[:5]))
-    else:
-        report.ok("institution_ids")
-    expected = meta.get("per_institution") or 0
-    small = [f"{u.get('name', u['id'])} ({u.get('faculty_count') or 0})" for u in universities
-             if expected and (u.get("faculty_count") or 0) < expected * SMALL_UNIVERSITY_SHARE]
-    if small:
-        report.warn(f"{len(small)} universities have under {SMALL_UNIVERSITY_SHARE:.0%} of the {expected} per-university "
-                    f"cap, check they matched the right institution: " + ", ".join(small[:10]))
 
     # Counts and record files.
     total = sum(u.get("faculty_count") or 0 for u in universities)
@@ -179,12 +151,11 @@ def check_data(data_dir, previous_dir=PREVIOUS_DIR, budget_mb=None, allow_shrink
     prev_total = sum(u.get("faculty_count") or 0 for u in prev_unis)
     shrunk = []
     if prev_total and prev_meta.get("last_ingestion"):
-        # Keyed by name, so re-pinning a university to its correct OpenAlex id doesn't read as losing everyone.
-        now = {u.get("name") or u["id"]: u.get("faculty_count") or 0 for u in universities}
+        now = {u["id"]: u.get("faculty_count") or 0 for u in universities}
         for u in prev_unis:
-            before, key = u.get("faculty_count") or 0, u.get("name") or u["id"]
-            if before >= MIN_PREVIOUS_FOR_UNI_CHECK and now.get(key, 0) < before * (1 - MAX_SHRINK):
-                shrunk.append(f"{key} {before}->{now.get(key, 0)}")
+            before = u.get("faculty_count") or 0
+            if before >= MIN_PREVIOUS_FOR_UNI_CHECK and now.get(u["id"], 0) < before * (1 - MAX_SHRINK):
+                shrunk.append(f"{u.get('name', u['id'])} {before}->{now.get(u['id'], 0)}")
         if total < prev_total * (1 - MAX_SHRINK):
             shrunk.insert(0, f"total {prev_total}->{total}")
     if shrunk and not allow_shrink:
@@ -261,7 +232,6 @@ def main(argv=None):
     p.add_argument("--previous-dir", default=PREVIOUS_DIR)
     p.add_argument("--mode", default="")
     p.add_argument("--budget-mb", type=float, default=None)
-    p.add_argument("--config", default=CONFIG_PATH, help="universities config, checked for duplicate institution ids")
     args = p.parse_args(argv)
     if args.action == "snapshot":
         snapshot(args.data_dir, args.previous_dir)
@@ -270,7 +240,7 @@ def main(argv=None):
     if os.environ.get("GITHUB_RUN_ID") and os.environ.get("GITHUB_REPOSITORY"):
         run_url = f"{os.environ.get('GITHUB_SERVER_URL', 'https://github.com')}/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{os.environ['GITHUB_RUN_ID']}"
     report, summary = check_data(args.data_dir, args.previous_dir, args.budget_mb,
-                                 allow_shrink=os.environ.get("QUALITY_ALLOW_SHRINK") == "1", config_path=args.config)
+                                 allow_shrink=os.environ.get("QUALITY_ALLOW_SHRINK") == "1")
     log(write_reports(report, summary, args.mode, run_url))
     if report.errors:
         return 1

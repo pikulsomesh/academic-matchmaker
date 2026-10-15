@@ -45,23 +45,9 @@ MAX_PAGE_BYTES = 3_000_000
 
 
 class Cache:
-    """One JSON file per cached answer. Remembers which files this run used, so a finished run can drop the rest
-    (prune) and the workflow can skip saving a cache nothing was added to (dirty)."""
-
-    def __init__(self, root, enabled=True, dirty_marker=None):
+    def __init__(self, root, enabled=True):
         self.root = root
         self.enabled = enabled
-        self.dirty_marker = dirty_marker
-        self.used = set()
-        self.dirty = False
-        self._lock = threading.Lock()
-
-    def _mark_dirty(self):
-        # Written on the first change, not at exit, so even a hard stop (watchdog) leaves the marker.
-        if not self.dirty and self.dirty_marker:
-            with open(self.dirty_marker, "w", encoding="utf-8") as fh:
-                fh.write("cache changed\n")
-        self.dirty = True
 
     def _path(self, kind, key):
         safe = hashlib.sha1(key.encode()).hexdigest()[:20]
@@ -70,8 +56,6 @@ class Cache:
     def get(self, kind, key):
         path = self._path(kind, key)
         if self.enabled and os.path.exists(path):
-            with self._lock:
-                self.used.add(path)
             with open(path, encoding="utf-8") as fh:
                 return json.load(fh)
         return None
@@ -83,23 +67,7 @@ class Cache:
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "w", encoding="utf-8") as fh:
             json.dump(value, fh)
-        with self._lock:
-            self.used.add(path)
-            self._mark_dirty()
         return value
-
-    def prune(self):
-        """Delete every cached file this run did not read or write. -> number removed."""
-        removed = 0
-        for folder, _, files in os.walk(self.root):
-            for name in files:
-                path = os.path.join(folder, name)
-                if path not in self.used:
-                    os.remove(path)
-                    removed += 1
-        if removed:
-            self._mark_dirty()
-        return removed
 
 
 def log(*args):
@@ -269,17 +237,19 @@ class Web:
 
 
 def fetch_orcid(web, cache, orcid_url):
+    """Emails, researcher URLs and employment history from the public ORCID record (one request)."""
     orcid = orcid_url.rstrip("/").rsplit("/", 1)[-1]
-    cached = cache.get("orcid", orcid)
+    cached = cache.get("orcid-record", orcid)
     if cached is not None:
         return cached
-    body = web.get_text(f"https://pub.orcid.org/v3.0/{orcid}/person", headers={"Accept": "application/json"})
-    result = {"emails": [], "urls": []}
+    body = web.get_text(f"https://pub.orcid.org/v3.0/{orcid}/record", headers={"Accept": "application/json"})
+    result = {"emails": [], "urls": [], "employments": []}
     if body:
         try:
-            person = json.loads(body)
+            record = json.loads(body)
         except ValueError:
-            person = {}
+            record = {}
+        person = record.get("person") or {}
         for item in ((person.get("emails") or {}).get("email") or []):
             if item.get("email"):
                 result["emails"].append(item["email"].lower())
@@ -287,7 +257,8 @@ def fetch_orcid(web, cache, orcid_url):
             value = ((item.get("url") or {}).get("value") or "").strip()
             if value.startswith("http"):
                 result["urls"].append(value)
-    return cache.put("orcid", orcid, result)
+        result["employments"] = contacts.parse_orcid_employments(record)
+    return cache.put("orcid-record", orcid, result)
 
 
 def scrape_profile(web, cache, url, name, domains):
@@ -312,18 +283,22 @@ def load_directory(web, cache, directory):
     return cache.put("directory", f"{url}|{selector}", entries)
 
 
-def find_contacts(author, uni, domains, directory_index, web, cache, args):
+def find_contacts(author, uni, domains, directory_index, web, cache, args, inst=None):
     name = author["display_name"]
-    found = {"email": None, "profile_url": None, "profile_source": None, "title": None}
+    found = {"email": None, "profile_url": None, "profile_source": None, "title": None, "title_source": None,
+             "orcid_affiliation": None}
 
     entry = directory_index.get(contacts.name_key(name))
     if entry:
         found["email"] = entry.get("email")
         found["title"] = entry.get("title")
+        if found["title"]:
+            found["title_source"] = "directory"
         if entry.get("profile_url"):
             found["profile_url"], found["profile_source"] = entry["profile_url"], "directory"
 
-    orcid = fetch_orcid(web, cache, author["orcid"]) if author.get("orcid") and not args.skip_orcid else {"emails": [], "urls": []}
+    orcid = (fetch_orcid(web, cache, author["orcid"]) if author.get("orcid") and not args.skip_orcid
+             else {"emails": [], "urls": [], "employments": []})
     if not found["profile_url"]:
         institutional = [u for u in orcid["urls"] if contacts.same_site(u, domains)]
         if institutional:
@@ -332,7 +307,15 @@ def find_contacts(author, uni, domains, directory_index, web, cache, args):
     if found["profile_url"] and not args.skip_scrape and (not found["email"] or not found["title"]):
         scraped = scrape_profile(web, cache, found["profile_url"], name, domains)
         found["email"] = found["email"] or scraped.get("email")
-        found["title"] = found["title"] or scraped.get("title")
+        if not found["title"] and scraped.get("title"):
+            found["title"], found["title_source"] = scraped["title"], "profile_page"
+
+    # The person's own ORCID employment history is the best title source for anyone without a profile page.
+    names = [uni["name"], *(inst or {}).get("alternate_names", []), (inst or {}).get("display_name")]
+    title, found["orcid_affiliation"] = contacts.employment_title(
+        orcid.get("employments") or [], [n for n in names if n], [(inst or {}).get("ror")])
+    if not found["title"] and title:
+        found["title"], found["title_source"] = title, "orcid_employment"
 
     if not found["email"]:
         for email in orcid["emails"]:
@@ -372,6 +355,9 @@ def build_record(author, uni, inst, recent, found):
         "orcid": author.get("orcid"),
         "recent_publications": merge_publications([], recent),
         "profile_source": found["profile_source"],
+        "role": contacts.role_from_title(found["title"]),
+        "title_source": found.get("title_source"),
+        "orcid_affiliation": found.get("orcid_affiliation"),
         "last_publication_year": last_publication_year(author),
     }
     apply_lab_signals(record, record["recent_publications"])
@@ -404,12 +390,6 @@ def parse_args(argv=None):
     p.add_argument("--workers", type=int, default=6)
     p.add_argument("--shard", default=None, metavar="I/N",
                    help="build only universities whose position in the list is I modulo N (parallel jobs)")
-    p.add_argument("--only", action="append", default=None, metavar="NAME",
-                   help="build only the university with this config name (repeatable); one parallel job per university")
-    p.add_argument("--prune-cache", action="store_true",
-                   help="after a finished run, delete cached answers this run did not use (keeps a per-university cache lean)")
-    p.add_argument("--dirty-marker", default=None,
-                   help="write this file when the cache changed, so the workflow saves the cache only then")
     p.add_argument("--partial-out", default=None,
                    help="write this shard's records to this file instead of the final data; assemble.py merges them")
     p.add_argument("--openalex-per-second", type=float, default=8)
@@ -482,24 +462,12 @@ def build(args, client=None, web=None):
     client = client or OpenAlexClient(per_second=args.openalex_per_second, max_requests=args.max_openalex_requests)
     start_heartbeat(client)
     web = web or Web(per_second=args.web_per_second)
-    cache = Cache(CACHE_DIR, enabled=not args.no_cache, dirty_marker=args.dirty_marker)
-    result = ingest(args, config, client, web, cache, deadline)
-    if args.prune_cache and cache.enabled:
-        log(f"Pruned {cache.prune()} cached answers this run did not use.")
-    return result
-
-
-def ingest(args, config, client, web, cache, deadline):
+    cache = Cache(CACHE_DIR, enabled=not args.no_cache)
     unis = config["universities"][: args.institutions] if args.institutions else config["universities"]
     if args.shard:
         index, count = (int(x) for x in args.shard.split("/"))
         unis = [u for position, u in enumerate(unis) if position % count == index]
         log(f"Shard {index}/{count}: {len(unis)} universities")
-    if args.only:
-        unknown = set(args.only) - {u["name"] for u in unis}
-        if unknown:
-            raise SystemExit(f"Not in the config: {', '.join(sorted(unknown))}")
-        unis = [u for u in unis if u["name"] in args.only]
 
     universities, records = [], []
     config_updates = {}
@@ -522,15 +490,6 @@ def ingest(args, config, client, web, cache, deadline):
                     directory_index.setdefault(contacts.name_key(entry["name"]), entry)
 
         authors = fetch_authors(client, cache, short_id(inst["id"]), args)
-        extra_ids = [i for i in uni.get("extra_openalex_ids") or [] if i != short_id(inst["id"])]
-        if extra_ids:
-            # A merged university (e.g. Institute of Science Tokyo) whose researchers OpenAlex still files under
-            # the predecessors: pool everyone, most cited first, within the same cap.
-            pooled = {short_id(a["id"]): a for a in authors}
-            for extra in extra_ids:
-                for a in fetch_authors(client, cache, extra, args):
-                    pooled.setdefault(short_id(a["id"]), a)
-            authors = sorted(pooled.values(), key=lambda a: -a.get("cited_by_count", 0))[: args.per_institution]
 
         recent_by_author = fetch_recent_works_batched(client, cache, [short_id(a["id"]) for a in authors])
 
@@ -538,7 +497,7 @@ def ingest(args, config, client, web, cache, deadline):
             if deadline is not None and time.monotonic() >= deadline:
                 raise Paused("time budget reached")
             recent = recent_by_author[short_id(author["id"])]
-            found = find_contacts(author, uni, domains, directory_index, web, cache, args)
+            found = find_contacts(author, uni, domains, directory_index, web, cache, args, inst)
             return build_record(author, uni, inst, recent, found)
 
         with ThreadPoolExecutor(max_workers=args.workers) as pool:
@@ -556,7 +515,6 @@ def ingest(args, config, client, web, cache, deadline):
             "rank": uni["rank"],
             "homepage_url": inst.get("homepage_url"),
             "faculty_count": len(inst_records),
-            **({"extra_openalex_ids": extra_ids} if extra_ids else {}),
         })
 
     if args.partial_out:

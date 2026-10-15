@@ -70,13 +70,8 @@ class FakeOpenAlex(OpenAlexClient):
                 {"id": "https://openalex.org/I63966007", "display_name": "Massachusetts Institute of Technology",
                  "type": "education", "homepage_url": "http://web.mit.edu/", "country_code": "US"},
             ]}
-        if path.startswith("institutions/"):
-            return {"id": f"https://openalex.org/{path.split('/')[1]}", "display_name": "Massachusetts Institute of Technology",
-                    "type": "education", "homepage_url": "http://web.mit.edu/", "country_code": "US"}
         if path == "authors" and flt.startswith("last_known_institutions.id"):
-            inst = flt.split(",")[0].split(":", 1)[1]
-            by_inst = getattr(self, "by_institution", None)
-            return self._page(by_inst.get(inst, []) if by_inst else self.authors, params)
+            return self._page(self.authors, params)
         if path == "authors" and flt.startswith("openalex:"):
             ids = flt.split(":", 1)[1].split("|")
             return {"results": [self.refreshed.get(i) or a for a in self.authors
@@ -153,47 +148,6 @@ class PlanTests(unittest.TestCase):
             shutil.rmtree(d)
 
 
-class IngestUnitTests(unittest.TestCase):
-    UNIS = [{"name": n} for n in ("Massachusetts Institute of Technology", "Imperial College London",
-                                  "Universidad de Buenos Aires", "ETH Zurich")]
-
-    def test_one_job_per_university_with_stable_keys(self):
-        units, cap = plan_run.ingest_units(self.UNIS, legacy_shards=3, daily_requests=9000)
-        self.assertEqual([u["key"] for u in units], ["massachusetts-institute-of-technology", "imperial-college-london",
-                                                     "universidad-de-buenos-aires", "eth-zurich"])
-        self.assertEqual([u["legacy_shard"] for u in units], [0, 1, 2, 0])
-        self.assertEqual(cap, 2250)
-        grown, _ = plan_run.ingest_units([{"name": "Aalto University"}] + self.UNIS + [{"name": "Rice University"}])
-        self.assertEqual({u["name"]: u["key"] for u in units}.items() <= {u["name"]: u["key"] for u in grown}.items(), True,
-                         "adding universities, anywhere in the list, keeps every existing cache key")
-
-    def test_limits(self):
-        self.assertEqual(plan_run.ingest_units([{"name": f"U{i}"} for i in range(200)])[1], 500)
-        with self.assertRaises(SystemExit):
-            plan_run.ingest_units([{"name": f"U{i}"} for i in range(251)])
-        with self.assertRaises(SystemExit):
-            plan_run.ingest_units([{"name": "A B"}, {"name": "A-B"}])
-
-
-class CacheTests(unittest.TestCase):
-    def test_prune_keeps_only_what_the_run_used_and_marks_dirty(self):
-        tmp = tempfile.mkdtemp()
-        try:
-            old = initial_ingestion.Cache(os.path.join(tmp, "c"))
-            old.put("authors", "mine", [1])
-            old.put("authors", "sibling", [2])
-            marker = os.path.join(tmp, "dirty")
-            cache = initial_ingestion.Cache(os.path.join(tmp, "c"), dirty_marker=marker)
-            self.assertEqual(cache.get("authors", "mine"), [1])
-            self.assertFalse(os.path.exists(marker), "reading alone does not change the cache")
-            self.assertEqual(cache.prune(), 1)
-            self.assertTrue(os.path.exists(marker))
-            self.assertIsNone(cache.get("authors", "sibling"))
-            self.assertEqual(cache.get("authors", "mine"), [1])
-        finally:
-            shutil.rmtree(tmp)
-
-
 class TierTests(unittest.TestCase):
     COVERAGE = {"initial_per_institution": 1000, "tiers": [
         {"per_institution": 1000, "min_works": 20}, {"per_institution": 3000, "min_works": 10},
@@ -208,14 +162,6 @@ class TierTests(unittest.TestCase):
         self.assertEqual(self.plan(3000), ("full", 10000))
         self.assertEqual(self.plan(10000)[0], "skip")
         self.assertEqual(plan_run.plan("schedule", "0 2 * * *", "", "", {}, self.COVERAGE, True)[:2], ("full", 1000))
-
-    def test_target_holds_growth(self):
-        held = dict(self.COVERAGE, target_per_institution=1000)
-        meta = {"last_ingestion": "x", "per_institution": 1000}
-        self.assertEqual(plan_run.plan("schedule", "0 2 * * *", "", "", meta, held, True)[0], "skip")
-        self.assertEqual(plan_run.plan("schedule", "0 2 * * *", "", "", {}, held, True)[:2], ("full", 1000))
-        self.assertEqual(plan_run.plan("schedule", "0 2 * * *", "", "", meta,
-                                       dict(self.COVERAGE, target_per_institution=3000), True)[:2], ("full", 3000))
 
     def test_stops_when_size_budget_reached(self):
         self.assertEqual(self.plan(3000, budget_reached=True)[0], "skip")
@@ -545,6 +491,49 @@ class EmailTests(unittest.TestCase):
                          "Associate Professor of Materials Science and Engineering")
 
 
+class OrcidEmploymentTests(unittest.TestCase):
+    def emp(self, org, role=None, dept=None, start=None, current=True, ror=None):
+        return {"org": org, "ror": ror, "role": role, "department": dept, "start": start, "current": current}
+
+    def test_title_from_current_job_here(self):
+        jobs = [self.emp("Murdoch Childrens Research Institute", "Executive Director", start=2015),
+                self.emp("University of Melbourne", "Professor", start=2006),
+                self.emp("University of Melbourne", "Research Fellow", start=1999, current=False)]
+        self.assertEqual(contacts.employment_title(jobs, ["The University of Melbourne"]), ("Professor", "match"))
+
+    def test_department_added_and_prof_expanded(self):
+        jobs = [self.emp("Brown University Warren Alpert Medical School", "Professor", "Psychiatry and Human Behavior")]
+        self.assertEqual(contacts.employment_title(jobs, ["Brown University"]),
+                         ("Professor, Psychiatry and Human Behavior", "match"))
+        self.assertEqual(contacts.employment_title([self.emp("Cornell University", "Prof")], ["Cornell University"])[0], "Professor")
+
+    def test_other_university_is_not_used_but_is_reported(self):
+        jobs = [self.emp("Jilin University", "Prof. Dr.")]
+        self.assertEqual(contacts.employment_title(jobs, ["University of Illinois Urbana-Champaign"]), (None, "elsewhere"))
+        self.assertEqual(contacts.employment_title([], ["X University"]), (None, None))
+
+    def test_similar_names_do_not_match(self):
+        self.assertFalse(contacts.org_matches("Charité-Universitätsmedizin Berlin", None, ["Freie Universität Berlin"]))
+        self.assertFalse(contacts.org_matches("Massachusetts General Hospital", None, ["Massachusetts Institute of Technology"]))
+        self.assertTrue(contacts.org_matches("anything", "https://ror.org/05dqf9946", [], ["https://ror.org/05dqf9946"]))
+        self.assertFalse(contacts.org_matches("Institute of Science Tokyo", "https://ror.org/0112mx960", ["Institute of Science Tokyo"],
+                                              ["https://ror.org/05dqf9946"]))
+
+    def test_parse_record_and_roles(self):
+        record = {"activities-summary": {"employments": {"affiliation-group": [{"summaries": [{"employment-summary": {
+            "role-title": " Professor ", "department-name": "Physics", "start-date": {"year": {"value": "2014"}},
+            "organization": {"name": "University of Amsterdam", "disambiguated-organization": {
+                "disambiguation-source": "ROR", "disambiguated-organization-identifier": "https://ror.org/04dkp9463"}}}}]}]}}}
+        self.assertEqual(contacts.parse_orcid_employments(record), [
+            {"org": "University of Amsterdam", "ror": "https://ror.org/04dkp9463", "role": "Professor",
+             "department": "Physics", "start": 2014, "current": True}])
+        self.assertEqual(contacts.parse_orcid_employments({}), [])
+        self.assertEqual([contacts.role_from_title(t) for t in (
+            "Associate Professor of Chemistry", "Postdoctoral fellow", "PhD student", "Research Scientist",
+            "Professor Emeritus", None, "Clinician")],
+            ["professor", "postdoc", "student", "researcher", "emeritus", None, None])
+
+
 class EmbeddingTextTests(unittest.TestCase):
     def test_matches_browser_recipe(self):
         record = {"title": "Associate Professor of Chemistry", "primary_domain": "Materials Science",
@@ -628,12 +617,20 @@ class PipelineTests(unittest.TestCase):
               <div class='person'><h3>Rahul Kumar</h3><p>Professor of Materials Science and Engineering</p>
                 <a href='/people/rahul-kumar'>Profile</a> <span>rkumar (at) mit.edu</span></div>
               <div class='person'><h3>Someone Else</h3><a href='mailto:other@mit.edu'>other@mit.edu</a></div></div>""",
-            "https://pub.orcid.org/v3.0/0000-0001/person": json.dumps({
+            "https://pub.orcid.org/v3.0/0000-0001/record": json.dumps({"person": {
                 "emails": {"email": []},
-                "researcher-urls": {"researcher-url": [{"url": {"value": "https://www.mit.edu/~jdoe/"}}]}}),
+                "researcher-urls": {"researcher-url": [{"url": {"value": "https://www.mit.edu/~jdoe/"}}]}}}),
             "https://www.mit.edu/~jdoe/": "<html><body><h1>Jane Doe</h1><p>Associate Professor of Chemistry</p>"
                                           "<p>Email: jane.doe [at] mit [dot] edu</p></body></html>",
-            "https://pub.orcid.org/v3.0/0000-0003/person": json.dumps({"emails": {"email": []}}),
+            "https://pub.orcid.org/v3.0/0000-0003/record": json.dumps({
+                "person": {"emails": {"email": []}},
+                "activities-summary": {"employments": {"affiliation-group": [
+                    {"summaries": [{"employment-summary": {
+                        "role-title": "Staff Scientist", "department-name": "Chemistry",
+                        "organization": {"name": "Massachusetts Institute of Technology"},
+                        "start-date": {"year": {"value": "2020"}}}}]},
+                    {"summaries": [{"employment-summary": {
+                        "role-title": "Postdoc", "organization": {"name": "MIT"}, "end-date": {"year": {"value": "2019"}}}}]}]}}}),
         })
 
     def tearDown(self):
@@ -666,38 +663,6 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(sorted((r["id"], r["email"], r["title"]) for r in merged), single)
         self.assertEqual(json.loads(pathlib.Path(out, "metadata.json").read_text())["faculty_count"], 3)
 
-    def test_only_builds_the_named_university(self):
-        config = json.loads(pathlib.Path(self.config).read_text())
-        config["universities"].append(dict(config["universities"][0], rank=2, name="Other University", openalex_id="I5"))
-        pathlib.Path(self.config).write_text(json.dumps(config))
-        part = os.path.join(self.tmp, "p.json")
-        marker = os.path.join(self.tmp, "dirty")
-        initial_ingestion.main(["--config", self.config, "--per-institution", "10", "--only", "Other University",
-                                "--partial-out", part, "--prune-cache", "--dirty-marker", marker],
-                               client=FakeOpenAlex(self.authors, self.works), web=self.web)
-        self.assertEqual([u["name"] for u in json.loads(pathlib.Path(part).read_text())["universities"]],
-                         ["Other University"])
-        self.assertTrue(os.path.exists(marker))
-        os.remove(marker)
-        initial_ingestion.main(["--config", self.config, "--per-institution", "10", "--only", "Other University",
-                                "--partial-out", part, "--prune-cache", "--dirty-marker", marker],
-                               client=FakeOpenAlex(self.authors, self.works), web=self.web)
-        self.assertFalse(os.path.exists(marker), "a second, fully cached run leaves nothing new to save")
-        with self.assertRaises(SystemExit):
-            initial_ingestion.main(["--config", self.config, "--only", "Nowhere"], client=FakeOpenAlex([], []), web=self.web)
-
-    def test_merged_university_pools_its_predecessor_ids(self):
-        config = json.loads(pathlib.Path(self.config).read_text())
-        config["universities"][0].update(openalex_id="I63966007", extra_openalex_ids=["I777"])
-        pathlib.Path(self.config).write_text(json.dumps(config))
-        client = FakeOpenAlex(self.authors, self.works)
-        client.by_institution = {"I63966007": self.authors[:1], "I777": self.authors[1:]}
-        records = initial_ingestion.main(["--config", self.config, "--out-dir", self.tmp, "--per-institution", "2"],
-                                         client=client, web=self.web)
-        self.assertEqual(sorted(r["name"] for r in records), ["Jane Doe", "Rahul Kumar"], "most cited two across both ids")
-        self.assertTrue(all(r["institution"]["id"] == "I63966007" for r in records))
-        self.assertEqual(json.loads(pathlib.Path(self.tmp, "universities.json").read_text())[0]["extra_openalex_ids"], ["I777"])
-
     def test_ingestion_schema_and_contacts(self):
         records, client = self.ingest()
         by_name = {r["name"]: r for r in records}
@@ -710,6 +675,10 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(rahul["profile_url"], "https://dmse.mit.edu/people/rahul-kumar")
         self.assertEqual(rahul["title"], "Professor of Materials Science and Engineering")
         self.assertIn("missing_email", wei["flags"])
+        self.assertEqual((wei["title"], wei["title_source"], wei["role"], wei["orcid_affiliation"]),
+                         ("Staff Scientist, Chemistry", "orcid_employment", "researcher", "match"),
+                         "no profile page: the current ORCID job at this university becomes the title")
+        self.assertEqual((jane["title_source"], jane["role"], jane["orcid_affiliation"]), ("profile_page", "professor", None))
         self.assertEqual(wei["profile_url"], "https://orcid.org/0000-0003")
         self.assertEqual(records[-1]["name"], "Wei Zhang", "unverified records sort last")
 
