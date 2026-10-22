@@ -1,0 +1,18 @@
+name: Temporary probe 5 (removed before merge)
+on:
+  push:
+    branches: [claude/scratch-probe]
+    paths: [.github/workflows/zz-probe5.yml, scripts/zz_probe5.py]
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      OPENALEX_API_KEY: ${{ secrets.OPENALEX_API_KEY }}
+      OPENALEX_MAILTO: ${{ vars.OPENALEX_MAILTO }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: pip install requests beautifulsoup4 pypdf
+      - run: python scripts/zz_probe5.py
