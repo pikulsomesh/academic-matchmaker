@@ -40,5 +40,5 @@
   "vector_format": "bits",
   "ingest_shards": 50,
   "openalex_daily_requests": 9000,
-  "rebuild_token": 1
+  "rebuild_token": 2
 }

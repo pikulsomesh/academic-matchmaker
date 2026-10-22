@@ -1019,6 +1019,1014 @@
       ],
       "openalex_id": "I202697423",
       "directories": []
+    },
+    {
+      "rank": 101,
+      "name": "University of Copenhagen",
+      "country_code": "DK",
+      "openalex_search": [
+        "University of Copenhagen"
+      ],
+      "directories": [],
+      "openalex_id": "I124055696"
+    },
+    {
+      "rank": 102,
+      "name": "Pohang University of Science And Technology",
+      "country_code": "KR",
+      "openalex_search": [
+        "Pohang University of Science And Technology",
+        "POSTECH"
+      ],
+      "directories": [],
+      "openalex_id": "I123900574"
+    },
+    {
+      "rank": 103,
+      "name": "Nanjing University",
+      "country_code": "CN",
+      "openalex_search": [
+        "Nanjing University"
+      ],
+      "directories": [],
+      "openalex_id": "I881766915"
+    },
+    {
+      "rank": 103,
+      "name": "Utrecht University",
+      "country_code": "NL",
+      "openalex_search": [
+        "Utrecht University"
+      ],
+      "directories": [],
+      "openalex_id": "I193662353"
+    },
+    {
+      "rank": 105,
+      "name": "Lomonosov Moscow State University",
+      "country_code": "RU",
+      "openalex_search": [
+        "Lomonosov Moscow State University"
+      ],
+      "directories": [],
+      "openalex_id": "I19880235"
+    },
+    {
+      "rank": 105,
+      "name": "Rheinisch-Westfälische Technische Hochschule Aachen",
+      "country_code": "DE",
+      "openalex_search": [
+        "Rheinisch-Westfälische Technische Hochschule Aachen"
+      ],
+      "directories": [],
+      "openalex_id": "I887968799"
+    },
+    {
+      "rank": 107,
+      "name": "Technical University of Denmark",
+      "country_code": "DK",
+      "openalex_search": [
+        "Technical University of Denmark"
+      ],
+      "directories": [],
+      "openalex_id": "I96673099"
+    },
+    {
+      "rank": 108,
+      "name": "Universidade de São Paulo",
+      "country_code": "BR",
+      "openalex_search": [
+        "Universidade de São Paulo"
+      ],
+      "directories": [],
+      "openalex_id": "I17974374"
+    },
+    {
+      "rank": 109,
+      "name": "Tohoku University",
+      "country_code": "JP",
+      "openalex_search": [
+        "Tohoku University"
+      ],
+      "directories": [],
+      "openalex_id": "I201537933"
+    },
+    {
+      "rank": 110,
+      "name": "Queen Mary University of London",
+      "country_code": "GB",
+      "openalex_search": [
+        "Queen Mary University of London",
+        "QMUL"
+      ],
+      "directories": [],
+      "openalex_id": "I166337079"
+    },
+    {
+      "rank": 110,
+      "name": "University of Wisconsin-Madison",
+      "country_code": "US",
+      "openalex_search": [
+        "University of Wisconsin-Madison"
+      ],
+      "directories": [],
+      "openalex_id": "I135310074"
+    },
+    {
+      "rank": 112,
+      "name": "Qatar University",
+      "country_code": "QA",
+      "openalex_search": [
+        "Qatar University"
+      ],
+      "directories": [],
+      "openalex_id": "I60342839"
+    },
+    {
+      "rank": 113,
+      "name": "University of St Andrews",
+      "country_code": "GB",
+      "openalex_search": [
+        "University of St Andrews"
+      ],
+      "directories": [],
+      "openalex_id": "I16835326"
+    },
+    {
+      "rank": 114,
+      "name": "Aalto University",
+      "country_code": "FI",
+      "openalex_search": [
+        "Aalto University"
+      ],
+      "directories": [],
+      "openalex_id": "I9927081"
+    },
+    {
+      "rank": 114,
+      "name": "University of California, Davis",
+      "country_code": "US",
+      "openalex_search": [
+        "University of California, Davis"
+      ],
+      "directories": [],
+      "openalex_id": "I84218800"
+    },
+    {
+      "rank": 116,
+      "name": "Pontificia Universidad Católica de Chile",
+      "country_code": "CL",
+      "openalex_search": [
+        "Pontificia Universidad Católica de Chile"
+      ],
+      "directories": [],
+      "openalex_id": "I162148367"
+    },
+    {
+      "rank": 116,
+      "name": "University of Helsinki",
+      "country_code": "FI",
+      "openalex_search": [
+        "University of Helsinki"
+      ],
+      "directories": [],
+      "openalex_id": "I133731052"
+    },
+    {
+      "rank": 118,
+      "name": "University College Dublin",
+      "country_code": "IE",
+      "openalex_search": [
+        "University College Dublin"
+      ],
+      "directories": [],
+      "openalex_id": "I100930933"
+    },
+    {
+      "rank": 119,
+      "name": "Leiden University",
+      "country_code": "NL",
+      "openalex_search": [
+        "Leiden University"
+      ],
+      "directories": [],
+      "openalex_id": "I121797337"
+    },
+    {
+      "rank": 119,
+      "name": "Rice University",
+      "country_code": "US",
+      "openalex_search": [
+        "Rice University"
+      ],
+      "directories": [],
+      "openalex_id": "I74775410"
+    },
+    {
+      "rank": 119,
+      "name": "University of Oslo",
+      "country_code": "NO",
+      "openalex_search": [
+        "University of Oslo"
+      ],
+      "directories": [],
+      "openalex_id": "I184942183"
+    },
+    {
+      "rank": 119,
+      "name": "University of Waterloo",
+      "country_code": "CA",
+      "openalex_search": [
+        "University of Waterloo"
+      ],
+      "directories": [],
+      "openalex_id": "I151746483"
+    },
+    {
+      "rank": 123,
+      "name": "Georgia Institute of Technology",
+      "country_code": "US",
+      "openalex_search": [
+        "Georgia Institute of Technology"
+      ],
+      "directories": [],
+      "openalex_id": "I130701444"
+    },
+    {
+      "rank": 123,
+      "name": "Indian Institute of Technology Delhi",
+      "country_code": "IN",
+      "openalex_search": [
+        "Indian Institute of Technology Delhi",
+        "IITD"
+      ],
+      "directories": [],
+      "openalex_id": "I68891433"
+    },
+    {
+      "rank": 125,
+      "name": "RMIT University",
+      "country_code": "AU",
+      "openalex_search": [
+        "RMIT University"
+      ],
+      "directories": [],
+      "openalex_id": "I82951845"
+    },
+    {
+      "rank": 126,
+      "name": "Sungkyunkwan University",
+      "country_code": "KR",
+      "openalex_search": [
+        "Sungkyunkwan University"
+      ],
+      "directories": [],
+      "openalex_id": "I848706"
+    },
+    {
+      "rank": 126,
+      "name": "Universiti Kebangsaan Malaysia",
+      "country_code": "MY",
+      "openalex_search": [
+        "Universiti Kebangsaan Malaysia"
+      ],
+      "directories": [],
+      "openalex_id": "I885383172"
+    },
+    {
+      "rank": 128,
+      "name": "Sapienza University of Rome",
+      "country_code": "IT",
+      "openalex_search": [
+        "Sapienza University of Rome"
+      ],
+      "directories": [],
+      "openalex_id": "I861853513"
+    },
+    {
+      "rank": 129,
+      "name": "Indian Institute of Technology Bombay",
+      "country_code": "IN",
+      "openalex_search": [
+        "Indian Institute of Technology Bombay",
+        "IITB"
+      ],
+      "directories": [],
+      "openalex_id": "I162827531"
+    },
+    {
+      "rank": 130,
+      "name": "Humboldt-Universität zu Berlin",
+      "country_code": "DE",
+      "openalex_search": [
+        "Humboldt-Universität zu Berlin"
+      ],
+      "directories": [],
+      "openalex_id": "I39343248"
+    },
+    {
+      "rank": 131,
+      "name": "Aarhus University",
+      "country_code": "DK",
+      "openalex_search": [
+        "Aarhus University"
+      ],
+      "directories": [],
+      "openalex_id": "I204337017"
+    },
+    {
+      "rank": 132,
+      "name": "University of Bath",
+      "country_code": "GB",
+      "openalex_search": [
+        "University of Bath"
+      ],
+      "directories": [],
+      "openalex_id": "I51601045"
+    },
+    {
+      "rank": 132,
+      "name": "University of Science and Technology of China",
+      "country_code": "CN",
+      "openalex_search": [
+        "University of Science and Technology of China"
+      ],
+      "directories": [],
+      "openalex_id": "I126520041"
+    },
+    {
+      "rank": 134,
+      "name": "Universiti Putra Malaysia",
+      "country_code": "MY",
+      "openalex_search": [
+        "Universiti Putra Malaysia"
+      ],
+      "directories": [],
+      "openalex_id": "I130343225"
+    },
+    {
+      "rank": 134,
+      "name": "Universiti Sains Malaysia",
+      "country_code": "MY",
+      "openalex_search": [
+        "Universiti Sains Malaysia"
+      ],
+      "directories": [],
+      "openalex_id": "I139322472"
+    },
+    {
+      "rank": 136,
+      "name": "Universidad Nacional Autónoma de México",
+      "country_code": "MX",
+      "openalex_search": [
+        "Universidad Nacional Autónoma de México",
+        "UNAM"
+      ],
+      "directories": [],
+      "openalex_id": "I8961855"
+    },
+    {
+      "rank": 137,
+      "name": "Newcastle University",
+      "country_code": "GB",
+      "openalex_search": [
+        "Newcastle University"
+      ],
+      "directories": [],
+      "openalex_id": "I84884186"
+    },
+    {
+      "rank": 138,
+      "name": "Alma Mater Studiorum - University of Bologna",
+      "country_code": "IT",
+      "openalex_search": [
+        "Alma Mater Studiorum - University of Bologna"
+      ],
+      "directories": [],
+      "openalex_id": "I9360294"
+    },
+    {
+      "rank": 138,
+      "name": "Macquarie University",
+      "country_code": "AU",
+      "openalex_search": [
+        "Macquarie University"
+      ],
+      "directories": [],
+      "openalex_id": "I99043593"
+    },
+    {
+      "rank": 140,
+      "name": "Eindhoven University of Technology",
+      "country_code": "NL",
+      "openalex_search": [
+        "Eindhoven University of Technology"
+      ],
+      "directories": [],
+      "openalex_id": "I83019370"
+    },
+    {
+      "rank": 140,
+      "name": "Erasmus University Rotterdam",
+      "country_code": "NL",
+      "openalex_search": [
+        "Erasmus University Rotterdam"
+      ],
+      "directories": [],
+      "openalex_id": "I913958620"
+    },
+    {
+      "rank": 140,
+      "name": "University of North Carolina, Chapel Hill",
+      "country_code": "US",
+      "openalex_search": [
+        "University of North Carolina, Chapel Hill"
+      ],
+      "directories": [],
+      "openalex_id": "I114027177"
+    },
+    {
+      "rank": 143,
+      "name": "King Saud University",
+      "country_code": "SA",
+      "openalex_search": [
+        "King Saud University"
+      ],
+      "directories": [],
+      "openalex_id": "I28022161"
+    },
+    {
+      "rank": 144,
+      "name": "Texas A&M University",
+      "country_code": "US",
+      "openalex_search": [
+        "Texas A&M University"
+      ],
+      "directories": [],
+      "openalex_id": "I91045830"
+    },
+    {
+      "rank": 145,
+      "name": "Technische Universität Berlin",
+      "country_code": "DE",
+      "openalex_search": [
+        "Technische Universität Berlin"
+      ],
+      "directories": [],
+      "openalex_id": "I4577782"
+    },
+    {
+      "rank": 146,
+      "name": "University of Southern California",
+      "country_code": "US",
+      "openalex_search": [
+        "University of Southern California"
+      ],
+      "directories": [],
+      "openalex_id": "I1174212"
+    },
+    {
+      "rank": 147,
+      "name": "Stockholm University",
+      "country_code": "SE",
+      "openalex_search": [
+        "Stockholm University"
+      ],
+      "directories": [],
+      "openalex_id": "I161593684"
+    },
+    {
+      "rank": 147,
+      "name": "University of Groningen",
+      "country_code": "NL",
+      "openalex_search": [
+        "University of Groningen"
+      ],
+      "directories": [],
+      "openalex_id": "I169381384"
+    },
+    {
+      "rank": 147,
+      "name": "University of Liverpool",
+      "country_code": "GB",
+      "openalex_search": [
+        "University of Liverpool"
+      ],
+      "directories": [],
+      "openalex_id": "I146655781"
+    },
+    {
+      "rank": 150,
+      "name": "University of Cape Town",
+      "country_code": "ZA",
+      "openalex_search": [
+        "University of Cape Town"
+      ],
+      "directories": [],
+      "openalex_id": "I157614274"
+    },
+    {
+      "rank": 151,
+      "name": "Western University",
+      "country_code": "CA",
+      "openalex_search": [
+        "Western University"
+      ],
+      "directories": [],
+      "openalex_id": "I125749732"
+    },
+    {
+      "rank": 152,
+      "name": "University of Vienna",
+      "country_code": "AT",
+      "openalex_search": [
+        "University of Vienna"
+      ],
+      "directories": [],
+      "openalex_id": "I129774422"
+    },
+    {
+      "rank": 153,
+      "name": "Universiti Teknologi Malaysia",
+      "country_code": "MY",
+      "openalex_search": [
+        "Universiti Teknologi Malaysia"
+      ],
+      "directories": [],
+      "openalex_id": "I4576418"
+    },
+    {
+      "rank": 153,
+      "name": "Wageningen University & Research",
+      "country_code": "NL",
+      "openalex_search": [
+        "Wageningen University & Research"
+      ],
+      "directories": [],
+      "openalex_id": "I913481162"
+    },
+    {
+      "rank": 155,
+      "name": "University of Exeter",
+      "country_code": "GB",
+      "openalex_search": [
+        "University of Exeter"
+      ],
+      "directories": [],
+      "openalex_id": "I23923803"
+    },
+    {
+      "rank": 155,
+      "name": "University of Geneva",
+      "country_code": "CH",
+      "openalex_search": [
+        "University of Geneva"
+      ],
+      "directories": [],
+      "openalex_id": "I114457229"
+    },
+    {
+      "rank": 157,
+      "name": "Lancaster University",
+      "country_code": "GB",
+      "openalex_search": [
+        "Lancaster University"
+      ],
+      "directories": [],
+      "openalex_id": "I67415387"
+    },
+    {
+      "rank": 158,
+      "name": "University of Basel",
+      "country_code": "CH",
+      "openalex_search": [
+        "University of Basel"
+      ],
+      "directories": [],
+      "openalex_id": "I1850255"
+    },
+    {
+      "rank": 159,
+      "name": "Hanyang University",
+      "country_code": "KR",
+      "openalex_search": [
+        "Hanyang University"
+      ],
+      "directories": [],
+      "openalex_id": "I4575257"
+    },
+    {
+      "rank": 160,
+      "name": "University of Barcelona",
+      "country_code": "ES",
+      "openalex_search": [
+        "University of Barcelona"
+      ],
+      "directories": [],
+      "openalex_id": "I71999127"
+    },
+    {
+      "rank": 161,
+      "name": "Michigan State University",
+      "country_code": "US",
+      "openalex_search": [
+        "Michigan State University"
+      ],
+      "directories": [],
+      "openalex_id": "I87216513"
+    },
+    {
+      "rank": 162,
+      "name": "Ghent University",
+      "country_code": "BE",
+      "openalex_search": [
+        "Ghent University"
+      ],
+      "directories": [],
+      "openalex_id": "I32597200"
+    },
+    {
+      "rank": 163,
+      "name": "King Abdulaziz University",
+      "country_code": "SA",
+      "openalex_search": [
+        "King Abdulaziz University"
+      ],
+      "directories": [],
+      "openalex_id": "I185163786"
+    },
+    {
+      "rank": 164,
+      "name": "Nagoya University",
+      "country_code": "JP",
+      "openalex_search": [
+        "Nagoya University"
+      ],
+      "directories": [],
+      "openalex_id": "I60134161"
+    },
+    {
+      "rank": 165,
+      "name": "Chalmers University of Technology",
+      "country_code": "SE",
+      "openalex_search": [
+        "Chalmers University of Technology"
+      ],
+      "directories": [],
+      "openalex_id": "I66862912"
+    },
+    {
+      "rank": 166,
+      "name": "Al-Farabi Kazakh National University",
+      "country_code": "KZ",
+      "openalex_search": [
+        "Al-Farabi Kazakh National University"
+      ],
+      "directories": [],
+      "openalex_id": "I185571130"
+    },
+    {
+      "rank": 167,
+      "name": "Washington University in St. Louis",
+      "country_code": "US",
+      "openalex_search": [
+        "Washington University in St. Louis"
+      ],
+      "directories": [],
+      "openalex_id": "I204465549"
+    },
+    {
+      "rank": 168,
+      "name": "University of Montreal",
+      "country_code": "CA",
+      "openalex_search": [
+        "University of Montreal"
+      ],
+      "directories": [],
+      "openalex_id": "I70931966"
+    },
+    {
+      "rank": 169,
+      "name": "University of York",
+      "country_code": "GB",
+      "openalex_search": [
+        "University of York"
+      ],
+      "directories": [],
+      "openalex_id": "I52099693"
+    },
+    {
+      "rank": 170,
+      "name": "Hokkaido University",
+      "country_code": "JP",
+      "openalex_search": [
+        "Hokkaido University"
+      ],
+      "directories": [],
+      "openalex_id": "I205349734"
+    },
+    {
+      "rank": 170,
+      "name": "Kyushu University",
+      "country_code": "JP",
+      "openalex_search": [
+        "Kyushu University"
+      ],
+      "directories": [],
+      "openalex_id": "I135598925"
+    },
+    {
+      "rank": 172,
+      "name": "Universitat Autónoma de Barcelona",
+      "country_code": "ES",
+      "openalex_search": [
+        "Universitat Autónoma de Barcelona"
+      ],
+      "directories": [],
+      "openalex_id": "I123044942"
+    },
+    {
+      "rank": 173,
+      "name": "Arizona State University",
+      "country_code": "US",
+      "openalex_search": [
+        "Arizona State University"
+      ],
+      "directories": [],
+      "openalex_id": "I55732556"
+    },
+    {
+      "rank": 173,
+      "name": "McMaster University",
+      "country_code": "CA",
+      "openalex_search": [
+        "McMaster University"
+      ],
+      "directories": [],
+      "openalex_id": "I98251732"
+    },
+    {
+      "rank": 173,
+      "name": "Universidad de Chile",
+      "country_code": "CL",
+      "openalex_search": [
+        "Universidad de Chile"
+      ],
+      "directories": [],
+      "openalex_id": "I69737025"
+    },
+    {
+      "rank": 176,
+      "name": "National Tsing Hua University",
+      "country_code": "TW",
+      "openalex_search": [
+        "National Tsing Hua University"
+      ],
+      "directories": [],
+      "openalex_id": "I25846049"
+    },
+    {
+      "rank": 177,
+      "name": "Khalifa University of Science and Technology",
+      "country_code": "AE",
+      "openalex_search": [
+        "Khalifa University of Science and Technology"
+      ],
+      "directories": [],
+      "openalex_id": "I176601375"
+    },
+    {
+      "rank": 177,
+      "name": "Tongji University",
+      "country_code": "CN",
+      "openalex_search": [
+        "Tongji University"
+      ],
+      "directories": [],
+      "openalex_id": "I116953780"
+    },
+    {
+      "rank": 179,
+      "name": "University of California, Santa Barbara",
+      "country_code": "US",
+      "openalex_search": [
+        "University of California, Santa Barbara",
+        "UCSB"
+      ],
+      "directories": [],
+      "openalex_id": "I154570441"
+    },
+    {
+      "rank": 180,
+      "name": "Indian Institute of Technology Madras",
+      "country_code": "IN",
+      "openalex_search": [
+        "Indian Institute of Technology Madras",
+        "IITM"
+      ],
+      "directories": [],
+      "openalex_id": "I24676775"
+    },
+    {
+      "rank": 181,
+      "name": "Cardiff University",
+      "country_code": "GB",
+      "openalex_search": [
+        "Cardiff University"
+      ],
+      "directories": [],
+      "openalex_id": "I79510175"
+    },
+    {
+      "rank": 182,
+      "name": "Emory University",
+      "country_code": "US",
+      "openalex_search": [
+        "Emory University"
+      ],
+      "directories": [],
+      "openalex_id": "I150468666"
+    },
+    {
+      "rank": 183,
+      "name": "Curtin University",
+      "country_code": "AU",
+      "openalex_search": [
+        "Curtin University"
+      ],
+      "directories": [],
+      "openalex_id": "I205640436"
+    },
+    {
+      "rank": 184,
+      "name": "University of Bern",
+      "country_code": "CH",
+      "openalex_search": [
+        "University of Bern"
+      ],
+      "directories": [],
+      "openalex_id": "I118564535"
+    },
+    {
+      "rank": 184,
+      "name": "University of Wollongong",
+      "country_code": "AU",
+      "openalex_search": [
+        "University of Wollongong"
+      ],
+      "directories": [],
+      "openalex_id": "I204824540"
+    },
+    {
+      "rank": 186,
+      "name": "Wuhan University",
+      "country_code": "CN",
+      "openalex_search": [
+        "Wuhan University"
+      ],
+      "directories": [],
+      "openalex_id": "I37461747"
+    },
+    {
+      "rank": 187,
+      "name": "Tecnológico de Monterrey",
+      "country_code": "MX",
+      "openalex_search": [
+        "Tecnológico de Monterrey",
+        "ITESM"
+      ],
+      "directories": [],
+      "openalex_id": "I98461037"
+    },
+    {
+      "rank": 187,
+      "name": "University Complutense Madrid",
+      "country_code": "ES",
+      "openalex_search": [
+        "University Complutense Madrid"
+      ],
+      "directories": [],
+      "openalex_id": "I121748325"
+    },
+    {
+      "rank": 189,
+      "name": "Universitas Indonesia",
+      "country_code": "ID",
+      "openalex_search": [
+        "Universitas Indonesia"
+      ],
+      "directories": [],
+      "openalex_id": "I29617571"
+    },
+    {
+      "rank": 190,
+      "name": "Ohio State University",
+      "country_code": "US",
+      "openalex_search": [
+        "Ohio State University"
+      ],
+      "directories": [],
+      "openalex_id": "I52357470"
+    },
+    {
+      "rank": 191,
+      "name": "Université Catholique de Louvain",
+      "country_code": "BE",
+      "openalex_search": [
+        "Université Catholique de Louvain"
+      ],
+      "directories": [],
+      "openalex_id": "I95674353"
+    },
+    {
+      "rank": 191,
+      "name": "Queen's University",
+      "country_code": "CA",
+      "openalex_search": [
+        "Queen's University"
+      ],
+      "directories": [],
+      "openalex_id": "I204722609"
+    },
+    {
+      "rank": 193,
+      "name": "Universität Hamburg",
+      "country_code": "DE",
+      "openalex_search": [
+        "Universität Hamburg"
+      ],
+      "directories": [],
+      "openalex_id": "I159176309"
+    },
+    {
+      "rank": 194,
+      "name": "University of Reading",
+      "country_code": "GB",
+      "openalex_search": [
+        "University of Reading"
+      ],
+      "directories": [],
+      "openalex_id": "I71052956"
+    },
+    {
+      "rank": 194,
+      "name": "Vrije Universiteit Amsterdam",
+      "country_code": "NL",
+      "openalex_search": [
+        "Vrije Universiteit Amsterdam"
+      ],
+      "directories": [],
+      "openalex_id": "I865915315"
+    },
+    {
+      "rank": 196,
+      "name": "Waseda University",
+      "country_code": "JP",
+      "openalex_search": [
+        "Waseda University"
+      ],
+      "directories": [],
+      "openalex_id": "I150744194"
+    },
+    {
+      "rank": 197,
+      "name": "University of Otago",
+      "country_code": "NZ",
+      "openalex_search": [
+        "University of Otago"
+      ],
+      "directories": [],
+      "openalex_id": "I80281795"
+    },
+    {
+      "rank": 197,
+      "name": "Vienna University of Technology",
+      "country_code": "AT",
+      "openalex_search": [
+        "Vienna University of Technology"
+      ],
+      "directories": [],
+      "openalex_id": "I145847075"
+    },
+    {
+      "rank": 199,
+      "name": "National Yang Ming Chiao Tung University",
+      "country_code": "TW",
+      "openalex_search": [
+        "National Yang Ming Chiao Tung University"
+      ],
+      "directories": [],
+      "openalex_id": "I148366613"
+    },
+    {
+      "rank": 199,
+      "name": "Queen's University Belfast",
+      "country_code": "GB",
+      "openalex_search": [
+        "Queen's University Belfast"
+      ],
+      "directories": [],
+      "openalex_id": "I126231945"
     }
   ]
 }
