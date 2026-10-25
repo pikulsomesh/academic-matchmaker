@@ -6,7 +6,8 @@ up to two paths through the matcher and writes public/data/laureate_eval.json, w
 Demo tab and its pass/fail marker read:
 
   openalex  profile from the ORCID / OpenAlex author (src/ai/openalexProfile.js, via eval_profile.mjs)
-  resume    profile from eval/cvs/<id>.pdf (pypdf text -> src/ai/profile.js quickProfile), when the file exists
+  resume    profile from eval/cvs/<id>.pdf (a CV, homepage or Wikipedia article saved as PDF; pypdf text ->
+            src/ai/profile.js quickProfile), when the file exists
 
 Each profile is embedded with the same MiniLM model as the faculty vectors and ranked against the
 published vectors (per-university embeddings or the vectors/ clusters), as the site does. For the top
@@ -89,10 +90,28 @@ def names_match(wanted, found):
     return bool(a and b and a[-1] == b[-1] and a[0][0] == b[0][0])
 
 
+def verify_pinned(person, client):
+    """A pinned id is only trusted when the OpenAlex author it points to has the laureate's name."""
+    ref = f"orcid:{person['orcid']}" if person.get("orcid") else person["openalex_id"]
+    identity = {"openalex_id": person.get("openalex_id"), "orcid": person.get("orcid"), "resolved_by": "manifest", "note": None}
+    try:
+        author = client.get(f"/authors/{ref}", {"select": "id,display_name,orcid"})
+    except Exception as err:  # no OpenAlex author for this id, or OpenAlex is unreachable
+        return {**identity, "openalex_id": None, "orcid": None, "note": f"Pinned id {ref} could not be checked: {err}"}
+    if not names_match(person["name"], author.get("display_name")):
+        return {**identity, "openalex_id": None, "orcid": None,
+                "note": f"Pinned id {ref} belongs to {author.get('display_name')}, not {person['name']}; not used."}
+    return {**identity, "openalex_id": short(author.get("id")), "orcid": _orcid_of(author, person)}
+
+
+def _orcid_of(author, person):
+    return orcid_id(author.get("orcid")) or person.get("orcid")
+
+
 def resolve_identity(person, client):
     """-> {openalex_id, orcid, resolved_by, note}. Never guesses: no unique institution match -> unresolved."""
     if person.get("openalex_id") or person.get("orcid"):
-        return {"openalex_id": person.get("openalex_id"), "orcid": person.get("orcid"), "resolved_by": "manifest", "note": None}
+        return verify_pinned(person, client)
     data = client.get("/authors", {"search": person["name"], "per-page": 15,
                                     "select": "id,display_name,orcid,works_count,last_known_institutions"})
     pattern = re.compile(person.get("institution_match") or re.escape(person["institution"]), re.I)
@@ -293,7 +312,8 @@ def run(data_dir, manifest_path, client, encoder, run_url=None):
         runs = {"openalex": run_one(openalex_profile(identity), encoder, index, records_by_id, own_ids),
                 "resume": run_one(resume_profile(person), encoder, index, records_by_id, own_ids)}
         entries.append({k: person.get(k) for k in ("id", "name", "prize", "year", "citation", "institution")}
-                       | {"identity": identity, "cv_pdf": f"eval/cvs/{person['id']}.pdf" if has_cv else None, "runs": runs})
+                       | {"identity": identity, "cv_pdf": f"eval/cvs/{person['id']}.pdf" if has_cv else None,
+                                                    "cv_kind": person.get("profile_pdf_kind", "CV") if has_cv else None, "runs": runs})
     status, summary = summarize(entries)
     return {**base, "status": status, "summary": summary, "data_generated_at": meta.get("generated_at"), "entries": entries}
 

@@ -22,3 +22,11 @@ published data in `public/data`). Offline tests: `python -m unittest discover sc
 
 Sources are public only: ORCID and OpenAlex records, and public university pages for the CV PDFs. Economics (announced
 Oct 12) can be added to `laureates.json`.
+
+## Profile PDFs
+
+`eval/cvs/<id>.pdf` are public documents saved by hand, because the build sandbox cannot download them. `profile_pdf_kind` in the
+manifest says what each one is: Yu Deng's own CV, Hong Wang's personal homepage, and Wikipedia articles (CC BY-SA 4.0) for Karl
+Deisseroth, Peter Hegemann, Georg Nagel, Henri Kagan and Kenso Soai. A Wikipedia article is not a CV: its infobox (birth, awards)
+lands at the top of the extracted text, so those runs also show how the matcher copes with a noisy document. Still missing:
+John Pardon, Jacob Tsimerman and Francis Halzen.

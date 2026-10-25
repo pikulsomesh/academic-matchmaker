@@ -111,6 +111,17 @@ class LaureateEvalTests(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertEqual(json.load(open(os.path.join(self.dir, "laureate_eval.json")))["status"], "error")
 
+    def test_pinned_id_is_verified_against_the_author_name(self):
+        class Pinned:
+            def get(self, path, params=None):
+                return {"id": "https://openalex.org/A77", "display_name": "Someone Else", "orcid": None} if "0000-0000-0000-0002" in path \
+                    else {"id": "https://openalex.org/A1", "display_name": "Francis Halzen", "orcid": "https://orcid.org/0000-0000-0000-0001"}
+        good = laureate_eval.resolve_identity({**MANIFEST["laureates"][0], "orcid": "0000-0000-0000-0001"}, Pinned())
+        self.assertEqual((good["openalex_id"], good["orcid"], good["resolved_by"]), ("A1", "0000-0000-0000-0001", "manifest"))
+        bad = laureate_eval.resolve_identity({**MANIFEST["laureates"][0], "orcid": "0000-0000-0000-0002"}, Pinned())
+        self.assertIsNone(bad["openalex_id"])
+        self.assertIn("belongs to Someone Else", bad["note"])
+
     def test_name_matching(self):
         self.assertTrue(laureate_eval.names_match("Henri B. Kagan", "H. B. Kagan"))
         self.assertTrue(laureate_eval.names_match("Georg Nagel", "Georg Nagel"))
