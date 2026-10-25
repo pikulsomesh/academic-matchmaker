@@ -14,7 +14,7 @@ The 2026 Fields Medal and Nobel Prize winners (`laureates.json`) are a fixed tes
 4. embeds the profile with MiniLM, ranks the published vectors, and records the top 10 matches plus, for the top 5, the
    connections (closest research areas and papers, shared topics).
 
-It writes `public/data/laureate_eval.json`. The site's Demo tab and the pass/fail marker read it. Pass rules are in the
+It writes `public/data/laureate_eval.json`. The Demo tab lists only a representative sample: laureates with a passing run whose best match scores at least 0.40 (`DEMO_MIN_SCORE`) and whose profile has topics or text. Everyone else is left out of the Demo, though the marker still counts every attempted run. The site's Demo tab and the pass/fail marker read it. Pass rules are in the
 file's `criteria` and in `scripts/laureate_eval.py` (`MIN_TOP_SCORE`, `PASS_RATIO`).
 
 Run it by hand with `python scripts/laureate_eval.py` (needs network access to OpenAlex and Hugging Face, `node`, and the

@@ -70,7 +70,7 @@ class LaureateEvalTests(unittest.TestCase):
         shutil.rmtree(self.dir)
 
     def run_eval(self, **kw):
-        with mock.patch.object(laureate_eval, "bridge", fake_bridge), mock.patch.object(laureate_eval, "CV_DIR", self.dir), mock.patch.object(laureate_eval, "MIN_TOP_SCORE", 0.05):
+        with mock.patch.object(laureate_eval, "bridge", fake_bridge), mock.patch.object(laureate_eval, "CV_DIR", self.dir), mock.patch.object(laureate_eval, "MIN_TOP_SCORE", 0.05), mock.patch.object(laureate_eval, "DEMO_MIN_SCORE", 0.05):
             return laureate_eval.main(["--data-dir", self.dir, "--manifest", self.manifest], client=FakeClient(), encoder=FakeEncoder(), **kw)
 
     def test_resolves_by_institution_and_ranks_the_person_first(self):
@@ -86,6 +86,9 @@ class LaureateEvalTests(unittest.TestCase):
         self.assertIn("neutrino", run["matches"][0]["connections"]["shared_interests"])
         self.assertTrue(run["matches"][0]["connections"]["papers"])
         self.assertEqual(halzen["runs"]["resume"]["status"], "skipped")
+        self.assertTrue(halzen["showcase"])
+        self.assertFalse(nobody["showcase"])
+        self.assertEqual(json.load(open(os.path.join(self.dir, "laureate_eval.json")))["summary"]["people_shown"], 1)
 
     def test_unresolved_person_is_reported_not_guessed(self):
         self.run_eval()
@@ -121,6 +124,12 @@ class LaureateEvalTests(unittest.TestCase):
         bad = laureate_eval.resolve_identity({**MANIFEST["laureates"][0], "orcid": "0000-0000-0000-0002"}, Pinned())
         self.assertIsNone(bad["openalex_id"])
         self.assertIn("belongs to Someone Else", bad["note"])
+
+    def test_a_weak_match_is_left_out_of_the_demo(self):
+        run = {"status": "passed", "top_score": 0.35, "profile": {"interests": ["x"], "text": "x"}}
+        self.assertFalse(laureate_eval.is_showcase({"openalex": run}))
+        self.assertTrue(laureate_eval.is_showcase({"openalex": {**run, "top_score": 0.5}, "resume": {"status": "failed"}}))
+        self.assertFalse(laureate_eval.is_showcase({"openalex": {**run, "top_score": 0.5, "profile": {"interests": [], "text": " "}}}))
 
     def test_name_matching(self):
         self.assertTrue(laureate_eval.names_match("Henri B. Kagan", "H. B. Kagan"))

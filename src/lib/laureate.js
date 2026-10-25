@@ -27,3 +27,10 @@ export function runLabel(run) {
   if (run.status === 'failed') return { state: 'failed', text: run.error ?? 'Failed' }
   return { state: 'skipped', text: run.reason ?? 'Not run' }
 }
+
+/** What the Demo tab lists: only laureates the test marked as a good, representative match, with just their passing runs. */
+export function showcaseEntries(data) {
+  return (data?.entries ?? [])
+    .filter((e) => e.showcase)
+    .map((e) => ({ ...e, runs: Object.fromEntries(Object.entries(e.runs ?? {}).filter(([, run]) => run.status === 'passed')) }))
+}
