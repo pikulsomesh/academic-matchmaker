@@ -3,6 +3,7 @@ import { ArrowUpDown, Info, Search, SlidersHorizontal, Sparkles, X } from 'lucid
 import Navbar from './components/Navbar.jsx'
 import FilterSidebar from './components/FilterSidebar.jsx'
 import MatcherInterface from './components/MatcherInterface.jsx'
+import ConceptBar from './components/ConceptBar.jsx'
 import FacultyCard from './components/FacultyCard.jsx'
 import FacultyDetailModal from './components/FacultyDetailModal.jsx'
 import AboutModal from './components/AboutModal.jsx'
@@ -38,7 +39,7 @@ function coverageMessage(coverage, filtered, matchScope) {
 export default function App() {
   const search = useFacultySearch()
   const { results, loading, error, query, setQuery, sort, setSort, activeFilterCount, matchScores } = search
-  const ai = useLocalAI(search.faculty, { institutionIds: search.scopeInstitutionIds })
+  const ai = useLocalAI(search.faculty, { institutionIds: search.scopeInstitutionIds, tagVocab: search.tagVocab })
   const matcher = useMatcherBridge(ai)
   const { setMatchScores, loadUniversities, coverage } = search
   useEffect(() => setMatchScores(matcher.matchScores), [matcher.matchScores, setMatchScores])
@@ -73,6 +74,7 @@ export default function App() {
 
   // Keep the address in step with the search, so copying it shares the view.
   const { country, institution, domains } = search.filters
+  const { concepts, conceptMode, conceptHits } = search
   useEffect(() => {
     const hash = buildHash({
       query,
@@ -80,11 +82,13 @@ export default function App() {
       country,
       institution,
       domains,
+      concepts,
+      conceptMode,
       researcher: selected?.id ?? pendingResearcher,
       view,
     })
     if (hash !== window.location.hash) window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}${hash}`)
-  }, [query, sort, search.sortChosen, country, institution, domains, selected, pendingResearcher, view])
+  }, [query, sort, search.sortChosen, country, institution, domains, concepts, conceptMode, selected, pendingResearcher, view])
 
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [visible, setVisible] = useState(PAGE_SIZE)
@@ -171,6 +175,8 @@ export default function App() {
               </div>
             </div>
 
+            <ConceptBar {...search} resultCount={results.length} suggestions={ai.profileTags} />
+
             {matchScores ? (
               <div className="flex items-center justify-between gap-3 rounded-xl border border-cardinal/20 bg-cardinal/5 px-4 py-3 text-sm">
                 <span className="flex items-center gap-2 text-charcoal">
@@ -209,7 +215,7 @@ export default function App() {
                 <p className="text-sm text-mit-gray">
                   {results.length.toLocaleString()} {results.length === 1 ? 'researcher' : 'researchers'}
                 </p>
-                {(query.trim() || activeFilterCount > 0) && <CopyLinkButton label="Copy link to this search" />}
+                {(query.trim() || activeFilterCount > 0 || concepts.length > 0) && <CopyLinkButton label="Copy link to this search" />}
               </div>
             )}
 
@@ -225,11 +231,12 @@ export default function App() {
               <div className="rounded-2xl border border-dashed border-gray-200 px-6 py-16 text-center">
                 <p className="font-medium text-charcoal">No researchers match these criteria.</p>
                 <p className="mt-1 text-sm text-mit-gray">Try a broader search or clear some filters.</p>
-                {(activeFilterCount > 0 || query) && (
+                {(activeFilterCount > 0 || query || concepts.length > 0) && (
                   <button
                     type="button"
                     onClick={() => {
                       search.resetFilters()
+                      search.setConcepts([])
                       setQuery('')
                     }}
                     className="mt-4 text-sm font-medium text-cardinal hover:underline"
@@ -246,6 +253,7 @@ export default function App() {
                       key={f.id}
                       faculty={f}
                       matchScore={scoreOf(f)}
+                      conceptHit={conceptHits?.get(f.id)}
                       onSelect={() => setSelected(f)}
                       saved={shortlist.ids.has(f.id)}
                       onToggleSave={() => shortlist.toggle(f)}

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Index } from 'flexsearch'
-import { loadCatalog, loadUniversityRows } from '../data/facultyStore.js'
+import { loadCatalog, loadTagSynonyms, loadUniversityRows } from '../data/facultyStore.js'
+import { buildConceptMatcher, conceptProblem, parseConcepts, scoreConcepts } from '../lib/concepts.js'
 import { piScoreOf } from '../lib/roles.js'
 import { parseHash } from '../lib/urlState.js'
 
@@ -76,6 +77,10 @@ function search(q, faculty, index) {
  * the local AI matcher. While set, only scored faculty are shown and the
  * "relevance" sort orders by that score.
  *
+ * `concepts` (chips such as "gastrointestinal", "peptide") narrow the list to people whose
+ * OpenAlex tags match every concept (or any, with conceptMode 'any'); see lib/concepts.js.
+ * `conceptHits` maps faculty id -> { score, matched, hits } for the cards.
+ *
  * On large builds the catalog holds only the most important people
  * (`coverage.partial`). Picking a country or university loads everyone there,
  * and `loadUniversities(ids)` does the same for other callers (AI matches).
@@ -84,6 +89,8 @@ export default function useFacultySearch() {
   const [faculty, setFaculty] = useState([])
   const [universities, setUniversities] = useState([])
   const [allDomains, setAllDomains] = useState([])
+  const [tagVocab, setTagVocab] = useState(null)
+  const [tagSynonyms, setTagSynonyms] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [catalogInfo, setCatalogInfo] = useState({ partial: false, totalRows: 0 })
@@ -103,19 +110,52 @@ export default function useFacultySearch() {
     setSortState(value)
   }
   const [matchScores, setMatchScores] = useState(null)
+
+  // Concept chips: each is one concept, all of them must match (conceptMode 'all') or any one.
+  const [concepts, setConcepts] = useState(fromUrl.concepts)
+  const [conceptMode, setConceptMode] = useState(fromUrl.conceptMode)
+  const [conceptNotice, setConceptNotice] = useState(null)
+  const addConcepts = useCallback((text) => {
+    const parts = parseConcepts(text)
+    if (!parts.length) {
+      setConceptNotice(conceptProblem(text) ?? 'Type a research topic, e.g. “gastrointestinal + peptide”.')
+      return false
+    }
+    setConceptNotice(null)
+    setConcepts((list) => {
+      const seen = new Set(list.map((c) => c.toLowerCase()))
+      return [...list, ...parts.filter((p) => !seen.has(p.toLowerCase()))]
+    })
+    return true
+  }, [])
+  // One exact concept (a suggested tag), not split on "and".
+  const addConcept = useCallback((label) => {
+    if (conceptProblem(label)) return
+    setConcepts((list) => (list.some((c) => c.toLowerCase() === label.toLowerCase()) ? list : [...list, label]))
+  }, [])
+  const removeConcept = useCallback((c) => setConcepts((list) => list.filter((x) => x !== c)), [])
   useEffect(() => {
-    if (!sortChosen) setSortState(matchScores ? 'relevance' : 'pi')
-  }, [matchScores, sortChosen])
+    if (concepts.length && !tagSynonyms) loadTagSynonyms().then(setTagSynonyms)
+  }, [concepts.length, tagSynonyms])
+  const matchers = useMemo(
+    () => concepts.map((c) => buildConceptMatcher(c, { vocab: tagVocab, synonyms: tagSynonyms, domains: allDomains })),
+    [concepts, tagVocab, tagSynonyms, allDomains],
+  )
+
+  useEffect(() => {
+    if (!sortChosen) setSortState(matchScores || concepts.length ? 'relevance' : 'pi')
+  }, [matchScores, sortChosen, concepts.length])
 
   useEffect(() => {
     let cancelled = false
     loadCatalog()
-      .then(({ rows, universities: unis, domains, partial, totalRows }) => {
+      .then(({ rows, universities: unis, domains, tags, partial, totalRows }) => {
         if (cancelled) return
         setCatalogInfo({ partial: Boolean(partial), totalRows: totalRows ?? rows.length })
         setFaculty(rows)
         setUniversities(unis)
         setAllDomains(domains)
+        setTagVocab(tags ?? null)
       })
       .catch(() => !cancelled && setError('Could not load the faculty index.'))
       .finally(() => !cancelled && setLoading(false))
@@ -207,6 +247,17 @@ export default function useFacultySearch() {
     }
   }, [faculty, universities, allDomains, filters.country, catalogInfo.partial])
 
+  const conceptHits = useMemo(() => {
+    if (!matchers.length) return null
+    const out = new Map()
+    const needed = conceptMode === 'any' ? 1 : matchers.length
+    for (const f of faculty) {
+      const s = scoreConcepts(f, matchers)
+      if (s.matched >= needed) out.set(f.id, s)
+    }
+    return out
+  }, [faculty, matchers, conceptMode])
+
   const results = useMemo(() => {
     const q = query.trim()
     let hits = null
@@ -219,6 +270,7 @@ export default function useFacultySearch() {
     const rows = faculty.filter((f, i) => {
       if (hits && !hits.has(i)) return false
       if (matchScores && !(f.id in matchScores)) return false
+      if (conceptHits && !conceptHits.has(f.id)) return false
       if (filters.country && f.institution?.country_code !== filters.country) return false
       if (filters.institution && f.institution?.name !== filters.institution) return false
       if (filters.domains.length) {
@@ -231,6 +283,14 @@ export default function useFacultySearch() {
     const byCitations = (a, b) => (b.citation_count ?? 0) - (a.citation_count ?? 0)
     const comparators = {
       relevance: (a, b) => {
+        if (conceptHits) {
+          // More concepts matched first, then concept fit, blended with the AI score when there is one.
+          const ca = conceptHits.get(a.id)
+          const cb = conceptHits.get(b.id)
+          if (cb.matched !== ca.matched) return cb.matched - ca.matched
+          const blend = (c, f) => (matchScores ? 0.5 * c.score + 0.5 * (matchScores[f.id] ?? 0) : c.score)
+          return blend(cb, b) - blend(ca, a) || byCitations(a, b)
+        }
         if (matchScores) return (matchScores[b.id] ?? 0) - (matchScores[a.id] ?? 0)
         if (hits) return hits.get(position.get(a)) - hits.get(position.get(b))
         return byCitations(a, b)
@@ -251,7 +311,7 @@ export default function useFacultySearch() {
       name: (a, b) => (a.name ?? '').localeCompare(b.name ?? ''),
     }
     return rows.sort(comparators[sort] ?? comparators.relevance)
-  }, [faculty, index, query, filters, sort, matchScores])
+  }, [faculty, index, query, filters, sort, matchScores, conceptHits])
 
   // Universities the country / institution filters leave in view (null = all),
   // so the matcher only downloads the embedding shards it needs.
@@ -295,6 +355,20 @@ export default function useFacultySearch() {
 
   const activeFilterCount =
     (filters.country ? 1 : 0) + (filters.institution ? 1 : 0) + filters.domains.length
+  // What each chip expanded to, for the chip's tooltip: the tags it reaches, best first.
+  const tagByKey = useMemo(() => new Map((tagVocab?.tags ?? []).map((t) => [t.toLowerCase(), t])), [tagVocab])
+  const conceptDetails = useMemo(
+    () =>
+      matchers.map((m) => ({
+        concept: m.label,
+        tagCount: m.tags.size,
+        examples: [...m.tags.entries()]
+          .sort((a, b) => b[1].weight - a[1].weight)
+          .slice(0, 6)
+          .map(([key]) => tagByKey.get(key) ?? key),
+      })),
+    [matchers, tagByKey],
+  )
 
   return {
     faculty,
@@ -313,6 +387,18 @@ export default function useFacultySearch() {
     setSort,
     matchScores,
     setMatchScores,
+    concepts,
+    setConcepts,
+    addConcepts,
+    addConcept,
+    removeConcept,
+    conceptMode,
+    setConceptMode,
+    conceptHits,
+    conceptDetails,
+    conceptNotice,
+    tagVocab,
+    tagSynonyms,
     scopeInstitutionIds,
     coverage,
     loadUniversities,

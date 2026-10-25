@@ -24,6 +24,8 @@ from datetime import date, timedelta
 from faculty import (AUTHOR_SELECT, apply_lab_signals, output_counts, DATA_DIR, WORK_SELECT, compute_domains, contact_flags, coverage_config,
                      merge_publications, last_publication_year, load_records, now_iso, publication_entry, read_json,
                      size_budget_mb, today_iso, write_json, write_records)
+import tags
+from tags import apply_tags
 from openalex import MAX_OR_VALUES, OpenAlexClient, chunks, short_id
 
 
@@ -97,6 +99,7 @@ def run(data_dir, client, overlap_days=30, since=None, until=None):
         primary, weights = compute_domains(author.get("topics"))
         if weights:
             record["primary_domain"], record["domain_weights"] = primary, weights
+        apply_tags(record, author.get("topics"))
         record.update(output_counts(author))
         record["flags"] = contact_flags(record)
         refreshed += 1
@@ -135,7 +138,10 @@ def main(argv=None, client=None):
                    help="re-scan this many days before the last run to catch late-indexed works")
     p.add_argument("--since", help="override the start date (YYYY-MM-DD)")
     args = p.parse_args(argv)
-    return run(args.data_dir, client or OpenAlexClient(), args.overlap_days, args.since)
+    client = client or OpenAlexClient()
+    if os.path.abspath(args.data_dir) == os.path.abspath(DATA_DIR):
+        tags.refresh_topic_info(client)  # topic keywords and subfields for tag_synonyms.json
+    return run(args.data_dir, client, args.overlap_days, args.since)
 
 
 if __name__ == "__main__":

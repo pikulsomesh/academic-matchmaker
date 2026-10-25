@@ -92,6 +92,7 @@ function rowFromRecord(record, uniById, uniByName) {
     ...record,
     has_email: Boolean(record.email),
     domains: domainsOf(record),
+    tags: [...new Set([...(record.topics ?? []), ...(record.keywords ?? [])])].slice(0, 8),
     institution: institutionFor(uni, inst),
     full: true,
   }
@@ -103,6 +104,7 @@ const embeddingRequests = new Map() // institution id -> Promise<decoded shard |
 const rowRequests = new Map() // institution id -> Promise<rows>
 const recordFileRequests = new Map() // record_file path -> Promise<void>
 let catalogPromise = null
+let tagNames = [] // tags.json: the shared tag list search rows point into
 let uniById = new Map()
 let catalogPartial = false
 let vectorsInfo = null // metadata.vectors: { k, dim, model, count } when vectors/ is published
@@ -125,28 +127,62 @@ export function loadLaureateEval() {
   return laureatePromise
 }
 
+// Single-file builds keep tags on the records themselves (topics, then keywords; see rowFromRecord).
+function tagVocabularyFromRows(rows) {
+  const counts = new Map()
+  for (const r of rows) {
+    for (const t of r.tags) counts.set(t, (counts.get(t) ?? 0) + 1)
+  }
+  const tags = [...counts.keys()].sort((a, b) => counts.get(b) - counts.get(a) || a.localeCompare(b))
+  return { tags, counts: tags.map((t) => counts.get(t)), total: rows.length }
+}
+
+let synonymsPromise = null
+/**
+ * tag_synonyms.json as Map tag name -> { subfield, keywords } (OpenAlex's keywords for each topic),
+ * fetched the first time someone types a concept. An empty Map when it isn't published.
+ */
+export function loadTagSynonyms() {
+  synonymsPromise ??= (async () => {
+    await loadCatalog().catch(() => null)
+    const json = await tryJson('tag_synonyms.json', null)
+    const out = new Map()
+    if (json?.format !== 'tag-synonyms-v1') return out
+    for (const [id, [sub, keywords]] of Object.entries(json.topics ?? {})) {
+      const name = tagNames[Number(id)]
+      if (name) out.set(name, { subfield: json.subfields?.[sub] ?? null, keywords: keywords ?? [] })
+    }
+    return out
+  })()
+  return synonymsPromise
+}
+
 export function loadCatalog() {
   catalogPromise ??= (async () => {
-    const [universities, domains, metadata] = await Promise.all([
+    const [universities, domains, metadata, tagFile] = await Promise.all([
       tryJson('universities.json', []),
       tryJson('domains.json', []),
       tryJson('metadata.json', {}),
+      tryJson('tags.json', null),
     ])
+    tagNames = tagFile?.format === 'tags-v1' ? tagFile.tags : []
     uniById = new Map(universities.map((u) => [u.id, u]))
     const uniByName = new Map(universities.map((u) => [u.name, u]))
     vectorsInfo = metadata?.vectors?.k ? metadata.vectors : null
 
-    const search = await tryJson('faculty_search.json', null).then((json) => (json ? decodeSearchFile(json) : null))
+    const search = await tryJson('faculty_search.json', null).then((json) => (json ? decodeSearchFile(json, tagNames) : null))
     if (Array.isArray(search)) {
       const rows = search.map((r) => rowFromSearch(r, uniById))
       catalogPartial = metadata?.search_index_complete === false && universities.some((u) => u.search_file)
       const published = universities.reduce((n, u) => n + (u.faculty_count ?? 0), 0)
-      return { rows, universities, domains, partial: catalogPartial, totalRows: Math.max(published, rows.length) }
+      const totalRows = Math.max(published, rows.length)
+      const tags = { tags: tagNames, counts: tagFile?.counts ?? [], total: totalRows }
+      return { rows, universities, domains, tags, partial: catalogPartial, totalRows }
     }
     const index = await fetchJson('faculty_index.json')
     const rows = index.map((r) => rowFromRecord(r, uniById, uniByName))
     rows.forEach((r) => records.set(r.id, r))
-    return { rows, universities, domains, partial: false, totalRows: rows.length }
+    return { rows, universities, domains, tags: tagVocabularyFromRows(rows), partial: false, totalRows: rows.length }
   })()
   catalogPromise.catch(() => {
     catalogPromise = null
@@ -168,7 +204,9 @@ export async function loadUniversityRows(institutionIds) {
     while (next < unis.length) {
       const uni = unis[next++]
       if (!rowRequests.has(uni.id)) {
-        const request = fetchJson(uni.search_file).then((json) => decodeSearchFile(json).map((r) => rowFromSearch(r, uniById)))
+        const request = fetchJson(uni.search_file).then((json) =>
+          decodeSearchFile(json, tagNames).map((r) => rowFromSearch(r, uniById)),
+        )
         request.catch(() => rowRequests.delete(uni.id))
         rowRequests.set(uni.id, request)
       }
