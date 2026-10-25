@@ -35,6 +35,7 @@ import contacts
 from faculty import (AUTHOR_SELECT, DATA_DIR, apply_lab_signals, output_counts, MAX_RECENT_PUBLICATIONS, WORK_SELECT, compute_domains,
                      contact_flags, merge_publications, now_iso, publication_entry, read_json, today_iso,
                      verification_rank, write_json, write_records, last_publication_year)
+from tags import apply_tags
 from openalex import OpenAlexClient, RateLimited, RateLimiter, RequestCapReached, chunks, short_id
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -437,6 +438,7 @@ def build_record(author, uni, inst, recent, found):
         "last_publication_year": last_publication_year(author),
     }
     apply_lab_signals(record, record["recent_publications"])
+    apply_tags(record, author.get("topics"), record["recent_publications"])
     record.update(output_counts(author))
     record["flags"] = contact_flags(record)
     return record

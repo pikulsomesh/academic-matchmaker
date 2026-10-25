@@ -8,6 +8,7 @@ from collections import defaultdict
 from datetime import date, datetime, timezone
 
 from openalex import short_id
+from tags import TAGS_FILE, apply_tags, record_tags, work_keywords, write_vocabulary
 
 DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "public", "data")
 MAX_DOMAINS = 5
@@ -17,7 +18,7 @@ AUTHOR_SELECT = ",".join([
     "id", "display_name", "orcid", "works_count", "cited_by_count", "summary_stats",
     "last_known_institutions", "topics", "counts_by_year",
 ])
-WORK_SELECT = "id,title,display_name,publication_year,publication_date,authorships,funders"
+WORK_SELECT = "id,title,display_name,publication_year,publication_date,authorships,funders,keywords"
 
 
 def compute_domains(topics):
@@ -80,11 +81,14 @@ def publication_entry(work, author_id=None):
     funders = [f for f in funders if f][:2]
     if funders:
         entry["_funders"] = funders
+    keywords = work_keywords(work)
+    if keywords:
+        entry["_kw"] = keywords  # becomes the record's keyword tags (tags.apply_tags)
     return entry
 
 
 def strip_transient(pubs):
-    """Drop the underscore-prefixed working keys (_fa, _funders, _aff) before publications are written."""
+    """Drop the underscore-prefixed working keys (_fa, _funders, _aff, _kw) before publications are written."""
     return [{k: v for k, v in p.items() if not k.startswith("_")} for p in pubs]
 
 
@@ -165,7 +169,7 @@ def merge_publications(existing, new_entries, limit=MAX_RECENT_PUBLICATIONS):
         kept = by_key.setdefault(key, pub)
         if pub.get("position") and not kept.get("position"):
             kept["position"] = pub["position"]  # backfill the role on records built before it existed
-        for key in ("_fa", "_funders", "_aff"):
+        for key in ("_fa", "_funders", "_aff", "_kw"):
             if pub.get(key) and not kept.get(key):
                 kept[key] = pub[key]
     ordered = sorted(by_key.values(), key=lambda p: (p.get("date") or f"{p.get('year') or 0}-00-00"), reverse=True)
@@ -305,6 +309,7 @@ def search_row(record, record_file=None):
         "recent_works": record.get("recent_works"),
         "last_publication_year": record.get("last_publication_year"),
         "record_file": record_file,
+        "tags": record_tags(record),
     }
 
 
@@ -331,15 +336,18 @@ def estimated_bytes(record):
 # Row values follow `fields`; trailing nulls are dropped. institution_id, primary_domain, record_file and each
 # entry of domains are indexes into the tables above; profile_url "<n>|rest" means url_prefixes[n] + rest.
 # has_email is not stored (it is Boolean(email)). Decoded rows equal search_row() output.
+# tags are ids into the shared tags.json (header "tags_file": "tags.json", see scripts/tags.py); a file written
+# without that vocabulary carries its own "tags" table instead.
 # src/data/compactRows.js reads this format; keep the two in step.
 
 SEARCH_FORMAT = "compact-v1"
 SEARCH_FIELDS = ["id", "name", "title", "institution_id", "primary_domain", "domains", "citation_count", "email",
                  "profile_url", "seniority_score", "first_author_recent", "last_author_recent", "recent_works",
-                 "last_publication_year", "record_file"]
+                 "last_publication_year", "record_file", "tags"]
 URL_PREFIXES = ["https://orcid.org/", "https://openalex.org/"]
 TABLE_OF = {"institution_id": "institutions", "primary_domain": "domains", "domains": "domains",
-            "record_file": "record_files"}
+            "record_file": "record_files", "tags": "tags"}
+LIST_FIELDS = ("domains", "tags")
 
 
 def compact_url(url):
@@ -356,7 +364,7 @@ def _compact_values(row, index_of):
         value = row.get(field)
         if value is None or value == []:
             value = None
-        elif field == "domains":
+        elif field in LIST_FIELDS:
             value = [index_of(field, name) for name in value]
         elif field in TABLE_OF:
             value = index_of(field, value)
@@ -368,34 +376,43 @@ def _compact_values(row, index_of):
     return values
 
 
-def compact_search_file(rows):
-    """search_row() dicts -> a compact-v1 file (see above)."""
+def compact_search_file(rows, tag_index=None, tags_file=None):
+    """search_row() dicts -> a compact-v1 file (see above). tag_index: name -> id in the shared tags_file."""
     tables = {"institutions": [], "domains": [], "record_files": []}
+    if tag_index is None:
+        tables["tags"] = []
     positions = {name: {} for name in tables}
 
     def index_of(field, value):
         name = TABLE_OF[field]
+        if name == "tags" and tag_index is not None:
+            return tag_index[value]
         if value not in positions[name]:
             positions[name][value] = len(tables[name])
             tables[name].append(value)
         return positions[name][value]
 
     encoded = [_compact_values(row, index_of) for row in rows]
-    return {"format": SEARCH_FORMAT, "fields": SEARCH_FIELDS, **tables, "url_prefixes": URL_PREFIXES, "rows": encoded}
+    shared = {"tags_file": tags_file} if tag_index is not None and tags_file else {}
+    return {"format": SEARCH_FORMAT, "fields": SEARCH_FIELDS, **tables, **shared, "url_prefixes": URL_PREFIXES,
+            "rows": encoded}
 
 
-def decode_search_file(data):
-    """compact-v1 file (or a plain list of rows) -> search_row() dicts."""
+def decode_search_file(data, tag_names=None):
+    """compact-v1 file (or a plain list of rows) -> search_row() dicts. tag_names: the shared tags.json list,
+    for files that point at it (without it such tags stay ids)."""
     if isinstance(data, list):
         return data
     tables = {name: data.get(name) or [] for name in ("institutions", "domains", "record_files")}
+    tables["tags"] = data.get("tags") or tag_names
     prefixes = data.get("url_prefixes") or []
     rows = []
     for values in data["rows"]:
         row = {}
         for field, value in zip(data["fields"], values + [None] * (len(data["fields"]) - len(values))):
-            if value is not None and field == "domains":
-                value = [tables["domains"][i] for i in value]
+            if value is not None and field in LIST_FIELDS:
+                table = tables[TABLE_OF[field]]
+                value = [table[i] for i in value] if table is not None else value
             elif value is not None and field in TABLE_OF:
                 value = tables[TABLE_OF[field]][value]
             elif value is not None and field == "profile_url" and "|" in value[:4]:
@@ -403,14 +420,15 @@ def decode_search_file(data):
                 value = prefixes[int(n)] + rest if n.isdigit() else value
             row[field] = value
         row["domains"] = row.get("domains") or []
+        row["tags"] = row.get("tags") or []
         row["has_email"] = bool(row.get("email"))
         rows.append(row)
     return rows
 
 
-def write_search_file(rows, path):
+def write_search_file(rows, path, tag_index=None):
     """A compact-v1 search file, one person per line."""
-    data = compact_search_file(rows)
+    data = compact_search_file(rows, tag_index, TAGS_FILE)
     body = data.pop("rows")
     head = json.dumps(data, ensure_ascii=False, separators=(",", ":"))[:-1]
     os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -449,11 +467,13 @@ def write_records(records, universities, data_dir, combined_limit=COMBINED_LIMIT
     -> {"pruned", "faculty_count", "search_index_rows", "search_index_complete"}
     """
     for record in records:
+        apply_tags(record)  # paper keywords live in the transient _kw keys, so before they are stripped
         if any(k.startswith("_") for p in record.get("recent_publications") or [] for k in p):
             record["recent_publications"] = strip_transient(record["recent_publications"])
         (record["first_author_recent"], record["last_author_recent"],
          record["recent_works"], record["seniority_score"]) = role_signals(record)
     records[:], pruned = prune_to_budget(records, budget_bytes)
+    tag_index = write_vocabulary(data_dir, records)
     by_inst = {}
     for record in records:
         by_inst.setdefault(record["institution"].get("id"), []).append(record)
@@ -488,7 +508,8 @@ def write_records(records, universities, data_dir, combined_limit=COMBINED_LIMIT
         uni.pop("search_file", None)
         if not complete:
             uni["search_file"] = f"{SEARCH_SHARD_DIR}/{uni['id']}.json"
-            write_search_file([search_row(r, file_of[r["id"]]) for r in people], os.path.join(data_dir, uni["search_file"]))
+            write_search_file([search_row(r, file_of[r["id"]]) for r in people], os.path.join(data_dir, uni["search_file"]),
+                              tag_index)
     shard_dir = os.path.join(data_dir, FACULTY_SHARD_DIR)
     for name in os.listdir(shard_dir):  # universities dropped from the config, or files that became chunks
         if name not in keep:
@@ -496,7 +517,7 @@ def write_records(records, universities, data_dir, combined_limit=COMBINED_LIMIT
             shutil.rmtree(full) if os.path.isdir(full) else os.remove(full)
 
     top = records if complete else sorted(records, key=importance, reverse=True)[:search_index_rows]
-    write_search_file([search_row(r, file_of[r["id"]]) for r in top], os.path.join(data_dir, "faculty_search.json"))
+    write_search_file([search_row(r, file_of[r["id"]]) for r in top], os.path.join(data_dir, "faculty_search.json"), tag_index)
     write_json(os.path.join(data_dir, "universities.json"), universities)
     write_domains(records, os.path.join(data_dir, "domains.json"))
     combined = os.path.join(data_dir, "faculty_index.json")

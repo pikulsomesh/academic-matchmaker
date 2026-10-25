@@ -16,7 +16,7 @@ BASE_URL = "https://api.openalex.org"
 USER_AGENT = "academic-matchmaker-pipeline/1.0 (+https://github.com/pikulsomesh/academic-matchmaker)"
 MAX_OR_VALUES = 100  # OpenAlex caps OR filters (a|b|c) at 100 values
 MAX_RETRY_WAIT = 300  # seconds; a longer Retry-After means the daily budget is gone, so stop instead of sleeping
-OPTIONAL_SELECT_FIELDS = ("funders",)  # nice-to-have fields: if OpenAlex rejects them, retry without
+OPTIONAL_SELECT_FIELDS = ("funders", "keywords")  # nice-to-have fields: if OpenAlex rejects them, retry without
 
 
 def short_id(openalex_id):

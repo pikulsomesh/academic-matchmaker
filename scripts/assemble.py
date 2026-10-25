@@ -13,10 +13,11 @@ import os
 import sys
 
 import initial_ingestion as ingestion
+import tags
 from faculty import read_json, write_json
 
 
-def main(argv=None):
+def main(argv=None, client=None):
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--partials", required=True, help="folder holding the partial-*.json files (searched recursively)")
     p.add_argument("--expect", type=int, required=True, help="number of shards that should have produced a partial")
@@ -43,6 +44,8 @@ def main(argv=None):
         requests_made += part.get("openalex_requests", 0)
 
     config = read_json(args.config, {})
+    if client is not None:
+        tags.refresh_topic_info(client)  # topic keywords and subfields for tag_synonyms.json
     records = ingestion.finalize(records, universities, args, config.get("source"), requests_made)
     if updates and args.config == ingestion.CONFIG_PATH:
         for uni in config.get("universities", []):
@@ -53,4 +56,4 @@ def main(argv=None):
 
 
 if __name__ == "__main__":
-    main()
+    main(client=ingestion.OpenAlexClient(per_second=2))

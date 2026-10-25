@@ -58,12 +58,12 @@ test('CSV quotes commas, quotes and newlines and defuses formulas', () => {
 })
 
 test('hash state round-trips and ignores unknown sorts', () => {
-  const state = { query: 'graph neural', sort: 'citations', country: 'US', institution: 'MIT & Co', domains: ['Physics', 'Optics'], researcher: 'A5029', view: 'search' }
+  const state = { query: 'graph neural', sort: 'citations', country: 'US', institution: 'MIT & Co', domains: ['Physics', 'Optics'], concepts: ['gastrointestinal', 'peptide'], conceptMode: 'any', researcher: 'A5029', view: 'search' }
   const hash = buildHash(state)
   assert.deepEqual(parseHash(hash), state)
   assert.equal(buildHash({}), '')
   assert.equal(parseHash('#sort=evil').sort, null)
-  assert.deepEqual(parseHash(''), { query: '', sort: null, country: '', institution: '', domains: [], researcher: '', view: 'search' })
+  assert.deepEqual(parseHash(''), { query: '', sort: null, country: '', institution: '', domains: [], concepts: [], conceptMode: 'all', researcher: '', view: 'search' })
 })
 
 test('find contact searches the university site, or the university name without a homepage', () => {

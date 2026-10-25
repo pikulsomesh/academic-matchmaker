@@ -132,6 +132,17 @@ against the full-precision query. `"int8"` keeps `scale: 127` int8 rows as befor
 `embeddings/<institution id>.json` is written until `src/` mentions `vectors/centroids.json`, then dropped.
 Coverage beyond the first tier waits until `src/` mentions `record_file` (the site can read chunked full records).
 
+## Concept tags
+
+Every record carries `topics` (its strongest OpenAlex topics, up to 6) and `keywords` (OpenAlex keywords on its
+recent papers, up to 3, from the `_kw` working key; papers cached before keywords were fetched keep the stored
+ones). Search rows get `tags` (topics then keywords, at most 8) as ids into `tags.json`
+(`{format: "tags-v1", tags, counts, kinds}`, most used first) and search files say `"tags_file": "tags.json"`.
+`tag_synonyms.json` holds each topic's subfield and OpenAlex keywords, from `config/openalex_topics.json`
+(fetched by `assemble.py` / `cdc_update.py` every 90 days, about 23 requests; a failed fetch never stops a build).
+The site matches typed concepts ("gastrointestinal + peptide") and the visitor's profile against these tags
+(`src/lib/concepts.js`). Records built before tags existed get topics at the next monthly update or rebuild.
+
 ## Role signals
 
 OpenAlex affiliations include students and staff, so every record is a *researcher*, with a rough

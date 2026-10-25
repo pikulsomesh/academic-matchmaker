@@ -21,14 +21,20 @@ const COMPACT = {
 const ROWS = [
   { id: 'A1', name: 'Ada', title: 'Professor', institution_id: 'I1', primary_domain: 'Physics', domains: ['Optics', 'Physics'],
     citation_count: 900, email: 'ada@u.edu', profile_url: 'https://orcid.org/0000-0001', has_email: true, seniority_score: 80,
-    first_author_recent: 1, last_author_recent: 3, recent_works: 4, last_publication_year: 2026, record_file: 'faculty/I1/0.json' },
+    first_author_recent: 1, last_author_recent: 3, recent_works: 4, last_publication_year: 2026, record_file: 'faculty/I1/0.json', tags: [] },
   { id: 'A2', name: 'Bo', title: null, institution_id: 'I2', primary_domain: null, domains: [], citation_count: 0, email: null,
     profile_url: 'https://u.edu/~bo|x', has_email: false, seniority_score: null, first_author_recent: null,
-    last_author_recent: null, recent_works: null, last_publication_year: null, record_file: null },
+    last_author_recent: null, recent_works: null, last_publication_year: null, record_file: null, tags: [] },
 ]
 
 test('decodes compact rows to the same objects the pipeline encoded', () => {
   assert.deepEqual(decodeSearchFile(COMPACT), ROWS)
+})
+
+test('tags resolve through the shared tags.json list or the file\'s own table', () => {
+  const shared = { ...COMPACT, fields: [...COMPACT.fields, 'tags'], tags_file: 'tags.json', rows: [[...COMPACT.rows[0], [1, 0]]] }
+  assert.deepEqual(decodeSearchFile(shared, ['Inflammatory Bowel Disease', 'Peptide'])[0].tags, ['Peptide', 'Inflammatory Bowel Disease'])
+  assert.deepEqual(decodeSearchFile({ ...shared, tags: ['X', 'Y'] })[0].tags, ['Y', 'X'])
 })
 
 test('passes older plain-array files through', () => {

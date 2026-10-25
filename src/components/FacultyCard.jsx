@@ -1,4 +1,4 @@
-import { BookOpen, ExternalLink, Mail, MapPin, Quote, Search, Star } from 'lucide-react'
+import { BookOpen, ExternalLink, Mail, MapPin, Quote, Search, Star, Tags } from 'lucide-react'
 import { findContactUrl } from '../lib/contact.js'
 import { countryName, formatCount } from '../lib/format.js'
 import { LikelyPIBadge, RoleLine } from './RoleSignals.jsx'
@@ -88,7 +88,7 @@ export function ShortlistToggle({ saved, onToggle, name, className = '' }) {
   )
 }
 
-export default function FacultyCard({ faculty, onSelect, matchScore, saved = false, onToggleSave }) {
+export default function FacultyCard({ faculty, onSelect, matchScore, conceptHit, saved = false, onToggleSave }) {
   const inst = faculty.institution ?? {}
   const domains = (faculty.domains ?? []).slice(0, 3)
   const latest = faculty.recent_publications?.[0]
@@ -155,6 +155,29 @@ export default function FacultyCard({ faculty, onSelect, matchScore, saved = fal
             </span>
           ))}
         </div>
+      )}
+
+      {conceptHit?.hits?.some(Boolean) && (
+        <p className="flex items-start gap-1.5 text-xs text-gray-600">
+          <Tags className="mt-0.5 h-3.5 w-3.5 shrink-0 text-cardinal" />
+          <span>
+            {conceptHit.hits.map((h, i) =>
+              h ? (
+                <span key={i} className="mr-2 inline-block">
+                  <span className="font-medium text-charcoal">{h.concept}</span>
+                  {' → '}
+                  <span className="text-cardinal">{h.tag}</span>
+                  {h.via && h.via !== 'title' && h.via.toLowerCase() !== String(h.tag).toLowerCase() && <span className="text-mit-gray"> (via {h.via})</span>}
+                </span>
+              ) : null,
+            )}
+            {conceptHit.matched < conceptHit.hits.length && (
+              <span className="text-mit-gray">
+                matches {conceptHit.matched} of {conceptHit.hits.length}
+              </span>
+            )}
+          </span>
+        </p>
       )}
 
       {latest && (

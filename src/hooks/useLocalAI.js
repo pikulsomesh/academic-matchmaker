@@ -1,5 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { cachedRecords, defaultMatchScope, hasEmbeddingShards, hasVectorIndex, loadEmbeddings, searchVectors } from '../data/facultyStore.js'
+import {
+  cachedRecords,
+  defaultMatchScope,
+  hasEmbeddingShards,
+  hasVectorIndex,
+  loadEmbeddings,
+  loadTagSynonyms,
+  searchVectors,
+} from '../data/facultyStore.js'
+import { profileOverlap, profileTags } from '../lib/concepts.js'
 import { fetchOpenAlexProfile } from '../ai/openalexProfile.js'
 import { documentKind, extractDocumentText } from '../ai/documentText.js'
 import {
@@ -22,11 +31,14 @@ import { facultyEmbeddingText, profileEmbeddingText, rankIndexes } from '../ai/v
 // the first time someone sends one. Nothing leaves the browser except model
 // downloads from the Hugging Face Hub (cached by the browser after the first visit).
 //
-// const ai = useLocalAI(faculty, { institutionIds })
+// const ai = useLocalAI(faculty, { institutionIds, tagVocab })
 //   faculty           catalog rows (useFacultySearch().faculty); matches point at these
 //   institutionIds    universities whose embedding shards to rank against, null = all
+//   tagVocab          the OpenAlex tag list (useFacultySearch().tagVocab): the profile is mapped onto
+//                     it (ai.profileTags) and matches sharing those tags move up
 //   ai.profile        { interests: string[], summary: string, text: string }  (text = research text from uploads)
 //   ai.matches        [{ faculty, score }] best first, [] until a profile exists
+//   ai.profileTags    [{ tag, weight }] OpenAlex tags the profile names, most specific first
 //   ai.missingInstitutionIds  universities of matches whose rows aren't in `faculty` yet
 //   ai.matchScope     { universities, totalUniversities } when matching without a
 //                     filter covers only the top universities (large builds), else null
@@ -103,7 +115,10 @@ async function loadFacultyIndex(faculty, institutionIds, { onShards, onEmbed }) 
 
 const NO_FACULTY = []
 
-export default function useLocalAI(faculty = NO_FACULTY, { institutionIds = null } = {}) {
+// How much sharing the profile's tags lifts a match's similarity score (0-1 overlap).
+const TAG_BOOST = 0.15
+
+export default function useLocalAI(faculty = NO_FACULTY, { institutionIds = null, tagVocab = null } = {}) {
   const [profile, setProfile] = useState(EMPTY_PROFILE)
   const [sources, setSources] = useState([])
   const [messages, setMessages] = useState([])
@@ -303,10 +318,27 @@ export default function useLocalAI(faculty = NO_FACULTY, { institutionIds = null
     [queryText],
   )
 
+  // The profile in the researchers' own vocabulary, so generic words ("strategy") can't steer matches.
+  const [tagSynonyms, setTagSynonyms] = useState(null)
+  useEffect(() => {
+    if (queryText && !tagSynonyms && tagVocab?.tags?.length) loadTagSynonyms().then(setTagSynonyms)
+  }, [queryText, tagSynonyms, tagVocab])
+  const tags = useMemo(
+    () => (queryText ? profileTags(profile, { vocab: tagVocab, synonyms: tagSynonyms }) : []),
+    [queryText, profile, tagVocab, tagSynonyms],
+  )
+
   const byId = useMemo(() => new Map(faculty.map((f) => [f.id, f])), [faculty])
   const matches = useMemo(
-    () => ranked.filter((r) => byId.has(r.id)).map((r) => ({ faculty: byId.get(r.id), score: r.score })),
-    [ranked, byId],
+    () =>
+      ranked
+        .filter((r) => byId.has(r.id))
+        .map((r) => {
+          const f = byId.get(r.id)
+          return { faculty: f, score: Math.min(1, r.score + TAG_BOOST * profileOverlap(f, tags)) }
+        })
+        .sort((a, b) => b.score - a.score),
+    [ranked, byId, tags],
   )
   // On large builds the catalog holds only the most important people, so the
   // site loads these universities' rows to show every match.
@@ -318,6 +350,7 @@ export default function useLocalAI(faculty = NO_FACULTY, { institutionIds = null
 
   return {
     profile,
+    profileTags: tags,
     matches,
     missingInstitutionIds,
     matchScope,

@@ -273,11 +273,11 @@ class CompactSearchFileTests(unittest.TestCase):
          "domains": ["Optics", "Physics"], "citation_count": 900, "email": "ada@u.edu",
          "profile_url": "https://orcid.org/0000-0001", "has_email": True, "seniority_score": 80,
          "first_author_recent": 1, "last_author_recent": 3, "recent_works": 4, "last_publication_year": 2026,
-         "record_file": "faculty/I1/0.json"},
+         "record_file": "faculty/I1/0.json", "tags": ["Optical Coherence Tomography", "Laser"]},
         {"id": "A2", "name": "Bo", "title": None, "institution_id": "I2", "primary_domain": None, "domains": [],
          "citation_count": 0, "email": None, "profile_url": "https://u.edu/~bo|x", "has_email": False,
          "seniority_score": None, "first_author_recent": None, "last_author_recent": None, "recent_works": None,
-         "last_publication_year": None, "record_file": None},
+         "last_publication_year": None, "record_file": None, "tags": []},
     ]
 
     def test_round_trip(self):
@@ -888,7 +888,13 @@ class PipelineTests(unittest.TestCase):
         row = faculty.decode_search_file(self.read("faculty_search.json"))[0]
         self.assertEqual(set(row), {"id", "name", "title", "institution_id", "primary_domain", "domains",
                                     "citation_count", "email", "profile_url", "has_email", "seniority_score",
-                                "first_author_recent", "last_author_recent", "recent_works", "last_publication_year", "record_file"})
+                                "first_author_recent", "last_author_recent", "recent_works", "last_publication_year", "record_file",
+                                "tags"})
+        vocab = self.read("tags.json")
+        self.assertEqual(vocab["tags"][:3], ["Battery materials", "Electrolytes", "ML for materials"])
+        self.assertEqual(vocab["counts"][0], 3)
+        named = faculty.decode_search_file(self.read("faculty_search.json"), vocab["tags"])[0]
+        self.assertEqual(named["tags"], ["Battery materials", "Electrolytes", "ML for materials"])
         # Shard embeddings equal the matching rows of the combined file.
         combined = self.read("faculty_embeddings.json")
         self.assertEqual(self.read(uni["embeddings_file"])["data"], combined["data"])
