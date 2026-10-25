@@ -1,15 +1,106 @@
 {
-  "note": "2026 prize winners used as a fixed test set. Names, prizes and institutions come from public announcements (Simons Foundation for the Fields Medals, NobelPrize.org coverage for the Nobel Prizes). ORCID iDs and OpenAlex ids are not stored here on purpose: scripts/laureate_eval.py looks them up on each run and records what it found. Pin a verified id below (openalex_id / orcid) to override the lookup. Put a CV or profile PDF at eval/cvs/<id>.pdf to also run the resume path for that person. Economics (announced Oct 12) is not in the list yet.",
+  "note": "2026 prize winners used as a fixed test set. Names, prizes and institutions come from public announcements (Simons Foundation for the Fields Medals, NobelPrize.org coverage for the Nobel Prizes). ORCID iDs pinned here were supplied by Somesh; every other id is looked up by scripts/laureate_eval.py on each run (accepted only on a name and institution match). Pinned ids are checked against the OpenAlex author's name and reported as unresolved when they disagree. eval/cvs/<id>.pdf holds a saved public profile document for the resume path; profile_pdf_kind says what it is (a CV, a personal homepage or a Wikipedia article). Missing so far: profile PDFs for Pardon, Tsimerman and Halzen. Economics (announced Oct 12) is not in the list yet.",
   "laureates": [
-    {"id": "deng-yu", "name": "Yu Deng", "prize": "Fields Medal", "year": 2026, "citation": "Partial differential equations, including deriving the Boltzmann equation from colliding hard spheres", "institution": "University of Chicago", "institution_match": "chicago"},
-    {"id": "pardon-john", "name": "John Pardon", "prize": "Fields Medal", "year": 2026, "citation": "Symplectic geometry, including counting curves on Calabi-Yau 3-folds", "institution": "Stony Brook University", "institution_match": "stony brook"},
-    {"id": "tsimerman-jacob", "name": "Jacob Tsimerman", "prize": "Fields Medal", "year": 2026, "citation": "O-minimal techniques in arithmetic and complex algebraic geometry", "institution": "University of Toronto", "institution_match": "toronto"},
-    {"id": "wang-hong", "name": "Hong Wang", "prize": "Fields Medal", "year": 2026, "citation": "Harmonic analysis and geometric measure theory, including the three-dimensional Kakeya problem", "institution": "New York University", "institution_match": "new york university"},
-    {"id": "deisseroth-karl", "name": "Karl Deisseroth", "prize": "Nobel Prize in Physiology or Medicine", "year": 2026, "citation": "Discoveries concerning light-gated ion channels and optogenetics", "institution": "Stanford University", "institution_match": "stanford"},
-    {"id": "hegemann-peter", "name": "Peter Hegemann", "prize": "Nobel Prize in Physiology or Medicine", "year": 2026, "citation": "Discoveries concerning light-gated ion channels and optogenetics", "institution": "Humboldt University of Berlin", "institution_match": "humboldt"},
-    {"id": "nagel-georg", "name": "Georg Nagel", "prize": "Nobel Prize in Physiology or Medicine", "year": 2026, "citation": "Discoveries concerning light-gated ion channels and optogenetics", "institution": "University of Würzburg", "institution_match": "würzburg|wurzburg"},
-    {"id": "halzen-francis", "name": "Francis Halzen", "prize": "Nobel Prize in Physics", "year": 2026, "citation": "Decisive contributions to the IceCube Neutrino Observatory and the discovery of high-energy astrophysical neutrinos", "institution": "University of Wisconsin-Madison", "institution_match": "wisconsin"},
-    {"id": "kagan-henri", "name": "Henri B. Kagan", "prize": "Nobel Prize in Chemistry", "year": 2026, "citation": "Non-linear effects and autocatalysis in asymmetric organic synthesis", "institution": "Université Paris-Saclay (Paris-Sud)", "institution_match": "paris|saclay"},
-    {"id": "soai-kenso", "name": "Kenso Soai", "prize": "Nobel Prize in Chemistry", "year": 2026, "citation": "Non-linear effects and autocatalysis in asymmetric organic synthesis", "institution": "Tokyo University of Science", "institution_match": "tokyo university of science"}
+    {
+      "id": "deng-yu",
+      "name": "Yu Deng",
+      "prize": "Fields Medal",
+      "year": 2026,
+      "citation": "Partial differential equations, including deriving the Boltzmann equation from colliding hard spheres",
+      "institution": "University of Chicago",
+      "institution_match": "chicago",
+      "profile_pdf_kind": "CV",
+      "orcid": "0009-0006-0283-8757",
+      "orcid_source": "supplied by Somesh, 2026-10-25"
+    },
+    {
+      "id": "pardon-john",
+      "name": "John Pardon",
+      "prize": "Fields Medal",
+      "year": 2026,
+      "citation": "Symplectic geometry, including counting curves on Calabi-Yau 3-folds",
+      "institution": "Stony Brook University",
+      "institution_match": "stony brook"
+    },
+    {
+      "id": "tsimerman-jacob",
+      "name": "Jacob Tsimerman",
+      "prize": "Fields Medal",
+      "year": 2026,
+      "citation": "O-minimal techniques in arithmetic and complex algebraic geometry",
+      "institution": "University of Toronto",
+      "institution_match": "toronto",
+      "orcid": "0009-0000-1422-2788",
+      "orcid_source": "supplied by Somesh, 2026-10-25"
+    },
+    {
+      "id": "wang-hong",
+      "name": "Hong Wang",
+      "prize": "Fields Medal",
+      "year": 2026,
+      "citation": "Harmonic analysis and geometric measure theory, including the three-dimensional Kakeya problem",
+      "institution": "New York University",
+      "institution_match": "new york university",
+      "profile_pdf_kind": "personal homepage"
+    },
+    {
+      "id": "deisseroth-karl",
+      "name": "Karl Deisseroth",
+      "prize": "Nobel Prize in Physiology or Medicine",
+      "year": 2026,
+      "citation": "Discoveries concerning light-gated ion channels and optogenetics",
+      "institution": "Stanford University",
+      "institution_match": "stanford",
+      "profile_pdf_kind": "Wikipedia article"
+    },
+    {
+      "id": "hegemann-peter",
+      "name": "Peter Hegemann",
+      "prize": "Nobel Prize in Physiology or Medicine",
+      "year": 2026,
+      "citation": "Discoveries concerning light-gated ion channels and optogenetics",
+      "institution": "Humboldt University of Berlin",
+      "institution_match": "humboldt",
+      "profile_pdf_kind": "Wikipedia article"
+    },
+    {
+      "id": "nagel-georg",
+      "name": "Georg Nagel",
+      "prize": "Nobel Prize in Physiology or Medicine",
+      "year": 2026,
+      "citation": "Discoveries concerning light-gated ion channels and optogenetics",
+      "institution": "University of Würzburg",
+      "institution_match": "würzburg|wurzburg",
+      "profile_pdf_kind": "Wikipedia article"
+    },
+    {
+      "id": "halzen-francis",
+      "name": "Francis Halzen",
+      "prize": "Nobel Prize in Physics",
+      "year": 2026,
+      "citation": "Decisive contributions to the IceCube Neutrino Observatory and the discovery of high-energy astrophysical neutrinos",
+      "institution": "University of Wisconsin-Madison",
+      "institution_match": "wisconsin"
+    },
+    {
+      "id": "kagan-henri",
+      "name": "Henri B. Kagan",
+      "prize": "Nobel Prize in Chemistry",
+      "year": 2026,
+      "citation": "Non-linear effects and autocatalysis in asymmetric organic synthesis",
+      "institution": "Université Paris-Saclay (Paris-Sud)",
+      "institution_match": "paris|saclay",
+      "profile_pdf_kind": "Wikipedia article"
+    },
+    {
+      "id": "soai-kenso",
+      "name": "Kenso Soai",
+      "prize": "Nobel Prize in Chemistry",
+      "year": 2026,
+      "citation": "Non-linear effects and autocatalysis in asymmetric organic synthesis",
+      "institution": "Tokyo University of Science",
+      "institution_match": "tokyo university of science",
+      "profile_pdf_kind": "Wikipedia article"
+    }
   ]
 }

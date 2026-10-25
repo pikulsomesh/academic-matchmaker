@@ -14,7 +14,7 @@ The 2026 Fields Medal and Nobel Prize winners (`laureates.json`) are a fixed tes
 4. embeds the profile with MiniLM, ranks the published vectors, and records the top 10 matches plus, for the top 5, the
    connections (closest research areas and papers, shared topics).
 
-It writes `public/data/laureate_eval.json`. The site's Demo tab and the pass/fail marker read it. Pass rules are in the
+It writes `public/data/laureate_eval.json`. The Demo tab lists only a representative sample: laureates with a passing run whose best match scores at least 0.40 (`DEMO_MIN_SCORE`) and whose profile has topics or text. Everyone else is left out of the Demo, though the marker still counts every attempted run. The site's Demo tab and the pass/fail marker read it. Pass rules are in the
 file's `criteria` and in `scripts/laureate_eval.py` (`MIN_TOP_SCORE`, `PASS_RATIO`).
 
 Run it by hand with `python scripts/laureate_eval.py` (needs network access to OpenAlex and Hugging Face, `node`, and the
@@ -22,3 +22,11 @@ published data in `public/data`). Offline tests: `python -m unittest discover sc
 
 Sources are public only: ORCID and OpenAlex records, and public university pages for the CV PDFs. Economics (announced
 Oct 12) can be added to `laureates.json`.
+
+## Profile PDFs
+
+`eval/cvs/<id>.pdf` are public documents saved by hand, because the build sandbox cannot download them. `profile_pdf_kind` in the
+manifest says what each one is: Yu Deng's own CV, Hong Wang's personal homepage, and Wikipedia articles (CC BY-SA 4.0) for Karl
+Deisseroth, Peter Hegemann, Georg Nagel, Henri Kagan and Kenso Soai. A Wikipedia article is not a CV: its infobox (birth, awards)
+lands at the top of the extracted text, so those runs also show how the matcher copes with a noisy document. Still missing:
+John Pardon, Jacob Tsimerman and Francis Halzen.

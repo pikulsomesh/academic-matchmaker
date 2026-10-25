@@ -130,3 +130,15 @@ test('the demo view round-trips through the hash', () => {
   assert.equal(buildHash({ view: 'demo' }), '#view=demo')
   assert.equal(buildHash({ view: 'search' }), '')
 })
+
+test('the demo lists only showcase laureates and their passing runs', async () => {
+  const { showcaseEntries } = await import('../laureate.js')
+  const entries = [
+    { id: 'a', showcase: true, runs: { openalex: { status: 'passed' }, resume: { status: 'failed' } } },
+    { id: 'b', showcase: false, runs: { openalex: { status: 'passed' } } },
+  ]
+  const shown = showcaseEntries({ entries })
+  assert.deepEqual(shown.map((e) => e.id), ['a'])
+  assert.deepEqual(Object.keys(shown[0].runs), ['openalex'])
+  assert.deepEqual(showcaseEntries(null), [])
+})

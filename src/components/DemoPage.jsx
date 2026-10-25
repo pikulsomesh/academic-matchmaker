@@ -2,11 +2,11 @@ import { useEffect, useState } from 'react'
 import { ExternalLink } from 'lucide-react'
 import LaureateMarker from './LaureateMarker.jsx'
 import { loadLaureateEval } from '../data/facultyStore.js'
-import { laureateMarker, runLabel } from '../lib/laureate.js'
+import { laureateMarker, runLabel, showcaseEntries } from '../lib/laureate.js'
 
 const PATHS = [
   { key: 'openalex', label: 'From ORCID / OpenAlex' },
-  { key: 'resume', label: 'From CV PDF' },
+  { key: 'resume', label: 'From profile PDF' },
 ]
 
 const STATE_CLASSES = {
@@ -91,13 +91,13 @@ function Laureate({ entry }) {
         )}
         {entry.cv_pdf && (
           <a href={`https://github.com/pikulsomesh/academic-matchmaker/blob/main/${entry.cv_pdf}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-cardinal hover:underline">
-            CV PDF <ExternalLink className="h-3 w-3" />
+            {entry.cv_kind ?? 'Profile'} PDF <ExternalLink className="h-3 w-3" />
           </a>
         )}
       </p>
       <div className="mt-3 grid gap-3 lg:grid-cols-2">
-        {PATHS.map((p) => (
-          <RunPanel key={p.key} label={p.label} run={entry.runs?.[p.key]} />
+        {PATHS.filter((p) => entry.runs?.[p.key]).map((p) => (
+          <RunPanel key={p.key} label={p.key === 'resume' && entry.cv_kind ? `From ${entry.cv_kind} PDF` : p.label} run={entry.runs?.[p.key]} />
         ))}
       </div>
     </article>
@@ -109,7 +109,7 @@ export default function DemoPage() {
   useEffect(() => {
     loadLaureateEval().then(setData)
   }, [])
-  const entries = data?.entries ?? []
+  const entries = showcaseEntries(data)
   const marker = laureateMarker(data)
 
   return (
@@ -118,7 +118,7 @@ export default function DemoPage() {
         <h1 className="text-3xl font-semibold tracking-tight text-charcoal sm:text-4xl">Does the matcher work on people we know?</h1>
         <p className="mt-3 text-lg leading-relaxed text-gray-600">
           A fixed test set: the 2026 Fields Medal and Nobel Prize winners. Each one is run through the same matching steps as the home page, once from their
-          ORCID / OpenAlex profile and once from a CV PDF where we have one, and the closest researchers and the connections behind each match are shown below. The
+          ORCID / OpenAlex profile and once from a saved public profile PDF (a CV, personal homepage or Wikipedia article) where we have one, and the closest researchers and the connections behind each match are shown below. The
           test re-runs after every data refresh.
         </p>
       </div>
@@ -143,8 +143,9 @@ export default function DemoPage() {
           <summary className="cursor-pointer font-medium text-charcoal">How the test decides</summary>
           <ul className="mt-2 list-disc space-y-1 pl-5">
             <li>A run passes when a profile is built and the best match scores at least 30%. The marker passes when at least 80% of attempted runs pass.</li>
+            <li>Only laureates with a clearly good match (at least 40%) are listed here; anyone whose work was not found or matched weakly is left out. The pass/fail marker still counts every run.</li>
             <li>Whether a laureate finds their own record among their matches is shown but not scored: the data covers only faculty at the top 100 universities.</li>
-            <li>The CV path uses the site's no-language-model profile (embedding only). {data.encoder}.</li>
+            <li>The PDF path uses the site's no-language-model profile (embedding only). A Wikipedia article is not a CV, so its profile can include infobox text such as awards; that is part of what this shows. {data.encoder}.</li>
             <li>Sources: ORCID and OpenAlex public records and public university pages.</li>
           </ul>
         </details>
@@ -152,7 +153,7 @@ export default function DemoPage() {
 
       {data && entries.length === 0 && (
         <p className="rounded-2xl border border-dashed border-gray-200 px-6 py-12 text-center text-sm text-mit-gray">
-          {data.reason ?? 'No results yet. They appear after the first data refresh that includes the test.'}
+          {data.reason ?? 'No laureate has a good enough match to show yet. Results appear after a data refresh that includes the test.'}
         </p>
       )}
       {data === null && (
