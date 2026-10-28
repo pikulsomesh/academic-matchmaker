@@ -104,6 +104,7 @@ export default function App() {
         onShortlistClick={() => setShortlistOpen(true)}
         shortlistCount={shortlist.entries.length}
         facultyCount={coverage.totalRows || search.faculty.length}
+        universityCount={search.universityCount}
         view={view}
         onViewChange={setView}
         laureateData={laureateData}
@@ -119,7 +120,7 @@ export default function App() {
             Find researchers who share your interests.
           </h1>
           <p className="mt-3 text-lg leading-relaxed text-gray-600">
-            Browse faculty, postdocs and research staff across the world’s top 100 universities, or let a private, in-browser model match you
+            Browse faculty, postdocs and research staff across the world’s top {search.universityCount || ''} universities, or let a private, in-browser model match you
             from your resume.
           </p>
         </div>

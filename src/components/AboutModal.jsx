@@ -19,7 +19,7 @@ export default function AboutModal({ open, onClose }) {
           </h2>
           <p className="mt-2 leading-relaxed">
             Global Academic Matchmaker helps prospective PhD and post-doc candidates discover researchers across the top
-            100 global universities by research alignment. Matching runs entirely in your browser, so uploaded resumes
+            200 global universities by research alignment. Matching runs entirely in your browser, so uploaded resumes
             and profiles never leave your device.
           </p>
         </div>

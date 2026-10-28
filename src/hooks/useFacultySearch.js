@@ -372,6 +372,7 @@ export default function useFacultySearch() {
 
   return {
     faculty,
+    universityCount: universities.length,
     results,
     loading,
     error,

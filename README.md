@@ -1,6 +1,6 @@
 # Global Academic Matchmaker
 
-A static React (Vite) single-page app, hosted on GitHub Pages, that helps prospective PhD and post-doc candidates find faculty at the top 100 global universities by research alignment.
+A static React (Vite) single-page app, hosted on GitHub Pages, that helps prospective PhD and post-doc candidates find faculty at the top 200 global universities (QS World University Rankings 2026) by research alignment.
 
 > **Sample data:** `public/data/*.json` currently holds three placeholder faculty records (`example.edu` emails and profile links) that follow the target schema. They will be replaced by the ingestion pipeline in `scripts/`.
 
