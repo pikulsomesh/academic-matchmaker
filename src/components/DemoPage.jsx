@@ -144,7 +144,7 @@ export default function DemoPage() {
           <ul className="mt-2 list-disc space-y-1 pl-5">
             <li>A run passes when a profile is built and the best match scores at least 30%. The marker passes when at least 80% of attempted runs pass.</li>
             <li>Only laureates with a clearly good match (at least 40%) are listed here; anyone whose work was not found or matched weakly is left out. The pass/fail marker still counts every run.</li>
-            <li>Whether a laureate finds their own record among their matches is shown but not scored: the data covers only faculty at the top 100 universities.</li>
+            <li>Whether a laureate finds their own record among their matches is shown but not scored: the data covers only faculty at the top 200 universities.</li>
             <li>The PDF path uses the site's no-language-model profile (embedding only). A Wikipedia article is not a CV, so its profile can include infobox text such as awards; that is part of what this shows. {data.encoder}.</li>
             <li>Sources: ORCID and OpenAlex public records and public university pages.</li>
           </ul>

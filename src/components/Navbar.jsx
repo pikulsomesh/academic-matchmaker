@@ -1,7 +1,7 @@
 import { GraduationCap, Info, Star } from 'lucide-react'
 import LaureateMarker from './LaureateMarker.jsx'
 
-export default function Navbar({ onAboutClick, onShortlistClick, shortlistCount = 0, facultyCount, view = 'search', onViewChange, laureateData }) {
+export default function Navbar({ onAboutClick, onShortlistClick, shortlistCount = 0, facultyCount, universityCount, view = 'search', onViewChange, laureateData }) {
   return (
     <header className="sticky top-0 z-30 border-b border-gray-100 bg-white/90 backdrop-blur">
       <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4 sm:px-6">
@@ -14,7 +14,7 @@ export default function Navbar({ onAboutClick, onShortlistClick, shortlistCount 
               Global Academic Matchmaker
             </span>
             <span className="hidden text-xs text-mit-gray sm:block">
-              {facultyCount ? `${facultyCount.toLocaleString()} researchers · ` : ''}Top 100 global universities
+              {facultyCount ? `${facultyCount.toLocaleString()} researchers · ` : ''}{universityCount ? `Top ${universityCount} global universities` : 'Top global universities'}
             </span>
           </span>
         </a>
